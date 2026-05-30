@@ -3,6 +3,7 @@ import { GooeyDemo } from "@/components/ui/demo";
 import { generateOfflineProposal } from "@/lib/simulator";
 import { runFullResearchPipeline } from "@/lib/gemini";
 import type { GlobalState, PipelineStep, LogEntry } from "@/lib/types";
+import Dock from "@/components/ui/Dock";
 import {
   BookOpen,
   FlaskConical,
@@ -29,9 +30,11 @@ export default function App() {
   
   // Pipeline Settings
   const [question, setQuestion] = useState("What is the impact of microplastics on soil microbiome diversity?");
-  const [apiKey, setApiKey] = useState("");
-  const [useRealApi, setUseRealApi] = useState(false);
-  const [model, setModel] = useState("gemini-1.5-flash");
+  const [apiProvider, setApiProvider] = useState<"gemini" | "groq">("gemini");
+  const [geminiApiKey, setGeminiApiKey] = useState(import.meta.env.VITE_GEMINI_API_KEY || "");
+  const [groqApiKey, setGroqApiKey] = useState(import.meta.env.VITE_GROQ_API_KEY || "");
+  const [useRealApi, setUseRealApi] = useState(true);
+  const [model, setModel] = useState("gemini-2.5-flash");
   
   // Running State
   const [step, setStep] = useState<PipelineStep>("idle");
@@ -55,6 +58,27 @@ export default function App() {
       logsEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [logs]);
+
+  // Auto-switch inspector tabs based on available data
+  useEffect(() => {
+    if (!globalState) return;
+    if (globalState.critique?.per_hypothesis && globalState.critique.per_hypothesis.length > 0) {
+      setActiveInspectorTab("critiques");
+    } else if (globalState.experiments && globalState.experiments.length > 0) {
+      setActiveInspectorTab("protocols");
+    } else if (globalState.literature?.papers && globalState.literature.papers.length > 0) {
+      setActiveInspectorTab("papers");
+    }
+  }, [globalState]);
+
+  // Synchronize model selection when API provider changes
+  useEffect(() => {
+    if (apiProvider === "groq") {
+      setModel("llama-3.3-70b-versatile");
+    } else {
+      setModel("gemini-2.5-flash");
+    }
+  }, [apiProvider]);
 
   const addLog = (agent: LogEntry["agent"], message: string, type: LogEntry["type"] = "info") => {
     const newLog: LogEntry = {
@@ -98,38 +122,131 @@ export default function App() {
     if (!useRealApi) {
       // Offline Simulated Mode
       try {
+        const finalState = generateOfflineProposal(question);
+
+        // Stage 1: Initialize baseline with parsed query variables
+        setGlobalState({
+          ...finalState,
+          literature: { papers: [], synthesis: "", knowledge_gaps: [], consensus_findings: [], contradictions: [] },
+          hypotheses: [],
+          experiments: [],
+          critique: { overall_score: 0, summary: "", best_hypothesis: "", recommended_sequence: [], synergy_opportunities: [], fatal_flaws: [], cross_cutting_recommendations: [], per_hypothesis: [] },
+          proposal: {
+            ...finalState.proposal,
+            abstract: "",
+            sections: {
+              ...finalState.proposal.sections,
+              "2_literature_review": { content: "", citations: [] },
+              "3_hypotheses": {
+                hypothesis_1: { title: "", statement: "", null_hyp: "", alt_hyp: "" },
+                hypothesis_2: { title: "", statement: "", null_hyp: "", alt_hyp: "" },
+                hypothesis_3: { title: "", statement: "", null_hyp: "", alt_hyp: "" }
+              },
+              "4_methodology": { overview: "", primary_experiment: null, alternative_experiments: [] },
+              "5_ethical_considerations": "",
+              "6_timeline_and_budget": "",
+              "7_expected_outcomes": "",
+              "8_limitations": "",
+              "9_future_directions": ""
+            }
+          }
+        });
         await new Promise((resolve) => setTimeout(resolve, 1200));
         
+        // Stage 2: Sourced literature and synthesis
         setStep("literature_agent");
         setProgressPercent(35);
         addLog("Literature Agent", "Sourcing databases and scoring primary literature...", "info");
         await new Promise((resolve) => setTimeout(resolve, 1500));
+        
+        setGlobalState((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            literature: finalState.literature,
+            proposal: {
+              ...prev.proposal,
+              sections: {
+                ...prev.proposal.sections,
+                "2_literature_review": finalState.proposal.sections["2_literature_review"]
+              }
+            }
+          };
+        });
         addLog("Literature Agent", "Identified 5 relevant studies. Synthesized knowledge base and gaps.", "success");
         
+        // Stage 3: Generated Hypotheses
         setStep("hypothesis_agent");
         setProgressPercent(55);
         addLog("Hypothesis Agent", "Formulating testable alternative (H1) and null (H0) hypotheses...", "info");
         await new Promise((resolve) => setTimeout(resolve, 1500));
+        
+        setGlobalState((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            hypotheses: finalState.hypotheses,
+            proposal: {
+              ...prev.proposal,
+              sections: {
+                ...prev.proposal.sections,
+                "3_hypotheses": finalState.proposal.sections["3_hypotheses"]
+              }
+            }
+          };
+        });
         addLog("Hypothesis Agent", "Mapped evidence trees for 3 distinct hypothesis angles.", "success");
         
+        // Stage 4: Designed Experimental Protocols
         setStep("experiment_agent");
         setProgressPercent(75);
         addLog("Experiment Agent", "Drafting experimental protocols, budgets, and power analyses...", "info");
         await new Promise((resolve) => setTimeout(resolve, 1500));
+        
+        setGlobalState((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            experiments: finalState.experiments,
+            proposal: {
+              ...prev.proposal,
+              sections: {
+                ...prev.proposal.sections,
+                "4_methodology": finalState.proposal.sections["4_methodology"]
+              }
+            }
+          };
+        });
         addLog("Experiment Agent", "Created E1, E2, and E3 protocols. Factored potential confounding factors.", "success");
         
+        // Stage 5: Performed Ethical and Rigor Critique
         setStep("critique_agent");
         setProgressPercent(90);
         addLog("Critique Agent", "Evaluating design rigor, technical feasibility, and ethical safeguards...", "info");
         await new Promise((resolve) => setTimeout(resolve, 1200));
+        
+        setGlobalState((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            critique: finalState.critique,
+            proposal: {
+              ...prev.proposal,
+              sections: {
+                ...prev.proposal.sections,
+                "5_ethical_considerations": finalState.proposal.sections["5_ethical_considerations"]
+              }
+            }
+          };
+        });
         addLog("Critique Agent", "Critique complete. Average Rigor Score: 8.3/10. Priority order indexed.", "success");
         
+        // Stage 6: Compiled Full Proposal
         setStep("proposal_synthesizer");
         setProgressPercent(97);
         addLog("Synthesizer", "Compiling final APA-formatted research manuscript...", "info");
         await new Promise((resolve) => setTimeout(resolve, 1200));
         
-        const finalState = generateOfflineProposal(question);
         setGlobalState(finalState);
         setStep("completed");
         setProgressPercent(100);
@@ -139,17 +256,19 @@ export default function App() {
         addLog("Orchestrator", `Critical error in simulated pipeline: ${err.message}`, "error");
       }
     } else {
-      // Real API Mode using Gemini
-      if (!apiKey) {
-        alert("Please enter your Gemini API key to run the live pipeline.");
+      // Real API Mode using Gemini or Groq
+      const activeApiKey = apiProvider === "groq" ? groqApiKey : geminiApiKey;
+      if (!activeApiKey) {
+        alert(`Please enter your ${apiProvider === "groq" ? "Groq" : "Gemini"} API key to run the live pipeline.`);
         setStep("idle");
         return;
       }
       
       try {
         const state = await runFullResearchPipeline(
+          apiProvider,
           question,
-          apiKey,
+          activeApiKey,
           model,
           (currentStep, msg, partialState) => {
             setStep(currentStep as PipelineStep);
@@ -282,30 +401,94 @@ export default function App() {
     setQuestion(text);
   };
 
+  const dockItems = [
+    {
+      icon: <ArrowLeft className="w-4 h-4 text-zinc-400 group-hover:text-white" />,
+      label: "Home",
+      onClick: () => setView("landing")
+    },
+    {
+      icon: step !== "idle" && step !== "completed" && step !== "error" ? (
+        <RefreshCw className="w-4 h-4 animate-spin text-purple-400" />
+      ) : (
+        <Play className="w-4 h-4 fill-current text-white" />
+      ),
+      label: step !== "idle" && step !== "completed" && step !== "error" ? "Processing" : "Run Engine",
+      onClick: triggerPipeline,
+      className: step !== "idle" && step !== "completed" && step !== "error" ? "opacity-50 cursor-not-allowed" : ""
+    },
+    {
+      icon: <Settings className={`w-4 h-4 transition-transform duration-500 ${showConfig ? "rotate-90 text-purple-400" : "text-white"}`} />,
+      label: "Toggle Config",
+      onClick: () => setShowConfig(!showConfig)
+    },
+    {
+      icon: <Database className={`w-4 h-4 ${activeInspectorTab === "papers" ? "text-purple-400" : "text-white"}`} />,
+      label: "Papers Info",
+      onClick: () => {
+        if (globalState?.literature?.papers && globalState.literature.papers.length > 0) {
+          setActiveInspectorTab("papers");
+        }
+      },
+      className: !(globalState?.literature?.papers && globalState.literature.papers.length > 0) ? "opacity-30 cursor-not-allowed" : ""
+    },
+    {
+      icon: <FlaskConical className={`w-4 h-4 ${activeInspectorTab === "protocols" ? "text-purple-400" : "text-white"}`} />,
+      label: "Protocols",
+      onClick: () => {
+        if (globalState?.experiments && globalState.experiments.length > 0) {
+          setActiveInspectorTab("protocols");
+        }
+      },
+      className: !(globalState?.experiments && globalState.experiments.length > 0) ? "opacity-30 cursor-not-allowed" : ""
+    },
+    {
+      icon: <ShieldAlert className={`w-4 h-4 ${activeInspectorTab === "critiques" ? "text-purple-400" : "text-white"}`} />,
+      label: "Critiques",
+      onClick: () => {
+        if (globalState?.critique?.per_hypothesis && globalState.critique.per_hypothesis.length > 0) {
+          setActiveInspectorTab("critiques");
+        }
+      },
+      className: !(globalState?.critique?.per_hypothesis && globalState.critique.per_hypothesis.length > 0) ? "opacity-30 cursor-not-allowed" : ""
+    },
+    {
+      icon: <Copy className="w-4 h-4 text-white" />,
+      label: "Copy JSON",
+      onClick: () => {
+        if (globalState) {
+          copyToClipboard(JSON.stringify(globalState.proposal, null, 2));
+        }
+      },
+      className: !globalState ? "opacity-30 cursor-not-allowed" : ""
+    },
+    {
+      icon: <Download className="w-4 h-4 text-white" />,
+      label: "Export Markdown",
+      onClick: () => {
+        if (globalState) {
+          downloadMarkdown();
+        }
+      },
+      className: !globalState ? "opacity-30 cursor-not-allowed" : ""
+    }
+  ];
+
   return (
     <div className="w-full min-h-screen bg-black text-gray-200 selection:bg-purple-500/30 overflow-x-hidden font-sans">
       {view === "landing" ? (
         <GooeyDemo onStart={() => setView("app")} />
       ) : (
         <div className="flex flex-col min-h-screen">
-          {/* Header Banner - Minimal and high contrast */}
+          {/* Header Banner - Clean and minimal */}
           <header className="sticky top-0 z-40 w-full border-b border-zinc-900 bg-black/90 backdrop-blur-md px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setView("landing")}
-                className="p-2 hover:bg-zinc-900 border border-zinc-900 rounded-lg transition-all group"
-                title="Back to Landing Page"
-              >
-                <ArrowLeft className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
-              </button>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold font-overusedGrotesk tracking-wide text-white uppercase">
-                  MANUSCRIPT WORKBENCH
-                </span>
-                <span className="text-[10px] text-zinc-500 uppercase font-mono tracking-wider">
-                  PS-AG8 Research Engine
-                </span>
-              </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold font-overusedGrotesk tracking-wide text-white uppercase">
+                MANUSCRIPT WORKBENCH
+              </span>
+              <span className="text-[10px] text-zinc-500 uppercase font-mono tracking-wider">
+                PS-AG8 Research Engine
+              </span>
             </div>
 
             {/* Micro horizontal node pipeline */}
@@ -327,36 +510,10 @@ export default function App() {
               ))}
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowConfig(!showConfig)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs hover:text-white transition-all cursor-pointer font-mono"
-              >
-                <Settings className={`w-3.5 h-3.5 transition-transform duration-500 ${showConfig ? "rotate-90" : ""}`} />
-                <span>CONFIG</span>
-              </button>
-
-              <button
-                onClick={triggerPipeline}
-                disabled={step !== "idle" && step !== "completed" && step !== "error"}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${
-                  step !== "idle" && step !== "completed" && step !== "error"
-                    ? "bg-purple-950/40 text-purple-400 border border-purple-950/50 cursor-not-allowed"
-                    : "bg-white hover:bg-zinc-200 text-black cursor-pointer hover:scale-[1.02]"
-                }`}
-              >
-                {step !== "idle" && step !== "completed" && step !== "error" ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Processing</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5 fill-black" />
-                    <span>Run Engine</span>
-                  </>
-                )}
-              </button>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+                Status: {step.replace("_", " ")}
+              </span>
             </div>
           </header>
 
@@ -374,31 +531,47 @@ export default function App() {
           {showConfig && (
             <div className="w-full border-b border-zinc-900 bg-zinc-950 px-8 py-5 transition-all duration-300 animate-in slide-in-from-top">
               <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="flex flex-col gap-1.5">
+                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
                     <Cpu className="w-3.5 h-3.5 text-purple-400" />
-                    Engine Mode
+                    Execution Mode
                   </label>
-                  <div className="flex gap-2 mt-1">
+                  <div className="flex gap-1.5 mt-1">
                     <button
                       onClick={() => setUseRealApi(false)}
-                      className={`flex-1 py-1.5 rounded text-[10px] uppercase font-mono font-bold border transition-all ${
+                      className={`flex-1 py-1 px-2 rounded text-[9px] uppercase font-mono font-bold border transition-all ${
                         !useRealApi
                           ? "bg-purple-500/10 border-purple-500 text-purple-300"
                           : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700"
                       }`}
                     >
-                      Offline Simulation
+                      Offline Sim
                     </button>
                     <button
-                      onClick={() => setUseRealApi(true)}
-                      className={`flex-1 py-1.5 rounded text-[10px] uppercase font-mono font-bold border transition-all ${
-                        useRealApi
+                      onClick={() => {
+                        setUseRealApi(true);
+                        setApiProvider("gemini");
+                      }}
+                      className={`flex-1 py-1 px-2 rounded text-[9px] uppercase font-mono font-bold border transition-all ${
+                        useRealApi && apiProvider === "gemini"
                           ? "bg-purple-500/10 border-purple-500 text-purple-300"
                           : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700"
                       }`}
                     >
-                      Live Gemini API
+                      Live Gemini
+                    </button>
+                    <button
+                      onClick={() => {
+                        setUseRealApi(true);
+                        setApiProvider("groq");
+                      }}
+                      className={`flex-1 py-1 px-2 rounded text-[9px] uppercase font-mono font-bold border transition-all ${
+                        useRealApi && apiProvider === "groq"
+                          ? "bg-purple-500/10 border-purple-500 text-purple-300"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700"
+                      }`}
+                    >
+                      Live Groq
                     </button>
                   </div>
                 </div>
@@ -406,14 +579,20 @@ export default function App() {
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
                     <Key className="w-3.5 h-3.5 text-purple-400" />
-                    Google Gemini API Key
+                    {apiProvider === "groq" ? "Groq API Key" : "Google Gemini API Key"}
                   </label>
                   <input
                     type="password"
                     disabled={!useRealApi}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={useRealApi ? "AIzaSy..." : "Disabled (Simulation Mode active)"}
+                    value={apiProvider === "groq" ? groqApiKey : geminiApiKey}
+                    onChange={(e) => {
+                      if (apiProvider === "groq") {
+                        setGroqApiKey(e.target.value);
+                      } else {
+                        setGeminiApiKey(e.target.value);
+                      }
+                    }}
+                    placeholder={useRealApi ? (apiProvider === "groq" ? "gsk_..." : "AIzaSy...") : "Disabled (Simulation Mode active)"}
                     className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs focus:outline-none focus:border-purple-500 disabled:opacity-50 text-white font-mono"
                   />
                 </div>
@@ -429,9 +608,17 @@ export default function App() {
                     onChange={(e) => setModel(e.target.value)}
                     className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs focus:outline-none focus:border-purple-500 text-white disabled:opacity-50 font-mono"
                   >
-                    <option value="gemini-1.5-flash">gemini-1.5-flash (fast)</option>
-                    <option value="gemini-2.5-flash">gemini-2.5-flash (recommended)</option>
-                    <option value="gemini-2.5-pro">gemini-2.5-pro (deep research)</option>
+                    {apiProvider === "groq" ? (
+                      <>
+                        <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (recommended)</option>
+                        <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (recommended)</option>
+                        <option value="gemini-2.5-pro">gemini-2.5-pro (deep research)</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>
@@ -439,7 +626,7 @@ export default function App() {
           )}
 
           {/* Three-Column Workspace */}
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 items-stretch max-w-8xl w-full mx-auto">
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 items-stretch max-w-8xl w-full mx-auto pb-28">
             
             {/* COLUMN 1: CONTROLS & PARSED VARIABLES (3 Columns) */}
             <aside className="lg:col-span-3 flex flex-col gap-5 h-full">
@@ -585,47 +772,27 @@ export default function App() {
 
               {/* Manuscript sheet */}
               <div ref={manuscriptRef} className="flex-1 p-8 md:p-12 overflow-y-auto max-h-[80vh] bg-zinc-950 text-zinc-300 select-text leading-relaxed text-sm scrollbar-thin">
-                {!globalState ? (
+                {step === "idle" ? (
                   <div className="h-full flex flex-col items-center justify-center py-20 text-center gap-4">
-                    {step === "idle" ? (
-                      <>
-                        <div className="w-12 h-12 rounded-full border border-zinc-800 bg-zinc-900/30 flex items-center justify-center text-zinc-500 animate-pulse">
-                          <BookOpen className="w-6 h-6" />
-                        </div>
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Manuscript Drafting Area</h4>
-                        <p className="text-xs text-zinc-500 max-w-sm font-light">
-                          Configure your parameters and trigger the research pipeline. The generated manuscript draft will compile here in real-time.
-                        </p>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
-                        <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider font-mono animate-pulse">
-                          {step.replace("_", " ").toUpperCase()} ACTIVE
-                        </h4>
-                        
-                        {/* Skeleton manuscript placeholder */}
-                        <div className="w-80 flex flex-col gap-2 mt-4 opacity-30 animate-pulse">
-                          <div className="h-4 bg-zinc-800 rounded w-3/4 mx-auto" />
-                          <div className="h-2 bg-zinc-900 rounded w-1/2 mx-auto mt-2" />
-                          <div className="h-2.5 bg-zinc-800 rounded w-full mt-6" />
-                          <div className="h-2.5 bg-zinc-800 rounded w-5/6" />
-                          <div className="h-2.5 bg-zinc-800 rounded w-4/5" />
-                        </div>
-                      </div>
-                    )}
+                    <div className="w-12 h-12 rounded-full border border-zinc-850 bg-zinc-900/30 flex items-center justify-center text-zinc-500 animate-pulse">
+                      <BookOpen className="w-6 h-6" />
+                    </div>
+                    <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Manuscript Drafting Area</h4>
+                    <p className="text-xs text-zinc-500 max-w-sm font-light">
+                      Configure your parameters and trigger the research pipeline. The generated manuscript draft will compile here in real-time.
+                    </p>
                   </div>
                 ) : (
                   <article className="flex flex-col gap-10">
                     {/* Document Header */}
                     <div className="text-center pb-8 border-b border-zinc-900">
                       <h1 className="text-2xl font-calendas text-white leading-snug font-bold max-w-xl mx-auto">
-                        {globalState.proposal.title}
+                        {globalState?.proposal?.title || `Deciphering ${globalState?.parsed_query?.domain || "Target Discipline"} of ${globalState?.parsed_query?.key_concepts?.join(", ") || "Concept"}`}
                       </h1>
                       <div className="mt-4 flex items-center justify-center gap-4 text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
-                        <span>SESSION: {globalState.session_id.substring(0, 8)}</span>
+                        <span>SESSION: {globalState?.session_id?.substring(0, 8) || "..."}</span>
                         <span>&bull;</span>
-                        <span>DATE: {new Date(globalState.timestamp).toLocaleDateString()}</span>
+                        <span>DATE: {globalState ? new Date(globalState.timestamp).toLocaleDateString() : "..."}</span>
                       </div>
                     </div>
 
@@ -635,9 +802,17 @@ export default function App() {
                         <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">Abstract</h3>
                         <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">SYNTHESIZED</span>
                       </div>
-                      <p className="text-xs text-zinc-400 italic text-justify leading-relaxed pl-4 border-l border-purple-500/30">
-                        {globalState.proposal.abstract}
-                      </p>
+                      {globalState?.proposal?.abstract ? (
+                        <p className="text-xs text-zinc-400 italic text-justify leading-relaxed pl-4 border-l border-purple-500/30 animate-fade-in">
+                          {globalState.proposal.abstract}
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 animate-pulse opacity-30 py-1 pl-4 border-l border-zinc-800">
+                          <div className="h-2.5 bg-zinc-850 rounded w-full" />
+                          <div className="h-2.5 bg-zinc-850 rounded w-11/12" />
+                          <div className="h-2.5 bg-zinc-850 rounded w-4/5" />
+                        </div>
+                      )}
                     </section>
 
                     {/* Section 1: Intro */}
@@ -646,23 +821,40 @@ export default function App() {
                         <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">1. Introduction & Problem Scope</h3>
                         <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">ORCHESTRATOR</span>
                       </div>
-                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
-                        {globalState.proposal.sections["1_introduction"].background}
-                      </p>
+                      {globalState?.proposal?.sections?.["1_introduction"]?.background ? (
+                        <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed animate-fade-in">
+                          {globalState.proposal.sections["1_introduction"].background}
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 animate-pulse opacity-35">
+                          <div className="h-2.5 bg-zinc-850 rounded w-full" />
+                          <div className="h-2.5 bg-zinc-850 rounded w-5/6" />
+                        </div>
+                      )}
                       
                       <div className="p-3.5 bg-zinc-900/20 border border-zinc-900 rounded-lg text-xs font-light leading-relaxed text-zinc-400 mt-2">
                         <strong className="text-white text-[10px] block font-mono uppercase tracking-wide mb-1">Problem Statement</strong>
-                        {globalState.proposal.sections["1_introduction"].problem_statement}
+                        {globalState?.proposal?.sections?.["1_introduction"]?.problem_statement || (
+                          <div className="h-2.5 bg-zinc-850 rounded w-full animate-pulse opacity-25 mt-1" />
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-light leading-relaxed mt-1">
                         <div className="p-3 bg-zinc-900/10 border border-zinc-900 rounded-lg">
                           <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Formal Research Inquiry</strong>
-                          <p className="text-zinc-300 italic mt-1 font-calendas">"{globalState.proposal.sections["1_introduction"].research_question}"</p>
+                          {globalState?.proposal?.sections?.["1_introduction"]?.research_question ? (
+                            <p className="text-zinc-300 italic mt-1 font-calendas">"{globalState.proposal.sections["1_introduction"].research_question}"</p>
+                          ) : (
+                            <div className="h-2.5 bg-zinc-850 rounded w-full animate-pulse opacity-25 mt-1.5" />
+                          )}
                         </div>
                         <div className="p-3 bg-zinc-900/10 border border-zinc-900 rounded-lg">
                           <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Significance & Utility</strong>
-                          <p className="text-zinc-400 mt-1 leading-normal text-[11px]">{globalState.proposal.sections["1_introduction"].significance}</p>
+                          {globalState?.proposal?.sections?.["1_introduction"]?.significance ? (
+                            <p className="text-zinc-400 mt-1 leading-normal text-[11px]">{globalState.proposal.sections["1_introduction"].significance}</p>
+                          ) : (
+                            <div className="h-2.5 bg-zinc-850 rounded w-5/6 animate-pulse opacity-25 mt-1.5" />
+                          )}
                         </div>
                       </div>
                     </section>
@@ -673,9 +865,29 @@ export default function App() {
                         <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">2. Literature Synthesis</h3>
                         <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">LITERATURE AGENT</span>
                       </div>
-                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
-                        {globalState.proposal.sections["2_literature_review"].content}
-                      </p>
+                      {globalState?.proposal?.sections?.["2_literature_review"]?.content || globalState?.literature?.synthesis ? (
+                        <div className="flex flex-col gap-3 animate-fade-in">
+                          <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
+                            {globalState.proposal?.sections?.["2_literature_review"]?.content || globalState.literature.synthesis}
+                          </p>
+                          {!globalState.proposal?.sections?.["2_literature_review"]?.content && globalState.literature?.consensus_findings && globalState.literature.consensus_findings.length > 0 && (
+                            <div className="mt-2 p-3 bg-zinc-900/10 border border-zinc-900 rounded-lg">
+                              <strong className="text-[9px] text-zinc-500 uppercase font-mono block mb-1">Consensus Findings (Intermediate)</strong>
+                              <ul className="list-disc pl-4 text-[11px] text-zinc-400 font-light flex flex-col gap-1">
+                                {globalState.literature.consensus_findings.slice(0, 3).map((f, idx) => (
+                                  <li key={idx}>{f}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 animate-pulse opacity-30">
+                          <div className="h-2.5 bg-zinc-850 rounded w-full" />
+                          <div className="h-2.5 bg-zinc-850 rounded w-11/12" />
+                          <div className="h-2.5 bg-zinc-850 rounded w-4/5" />
+                        </div>
+                      )}
                     </section>
 
                     {/* Section 3: Hypotheses */}
@@ -685,33 +897,47 @@ export default function App() {
                         <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">HYPOTHESIS AGENT</span>
                       </div>
                       
-                      <div className="flex flex-col gap-4 mt-2">
-                        {[
-                          globalState.proposal.sections["3_hypotheses"].hypothesis_1,
-                          globalState.proposal.sections["3_hypotheses"].hypothesis_2,
-                          globalState.proposal.sections["3_hypotheses"].hypothesis_3
-                        ].map((h, i) => (
-                          <div key={i} className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-lg flex flex-col gap-2">
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
-                              <span className="w-1 h-3 bg-purple-500 rounded-full" />
-                              H{i + 1}: {h.title}
-                            </span>
-                            <p className="text-xs text-zinc-300 font-calendas italic leading-relaxed pl-3 border-l border-zinc-800">
-                              "{h.statement}"
-                            </p>
-                            <div className="grid grid-cols-2 gap-3 text-[10px] text-zinc-500 mt-1 font-light leading-normal border-t border-zinc-900/60 pt-2">
-                              <div>
-                                <strong className="text-zinc-400 block text-[9px] uppercase font-mono mb-0.5">H₀ (Null)</strong>
-                                {h.null_hyp}
+                      {globalState?.hypotheses && globalState.hypotheses.length > 0 ? (
+                        <div className="flex flex-col gap-4 mt-2">
+                          {[
+                            globalState.proposal?.sections?.["3_hypotheses"]?.hypothesis_1 || globalState.hypotheses[0],
+                            globalState.proposal?.sections?.["3_hypotheses"]?.hypothesis_2 || globalState.hypotheses[1],
+                            globalState.proposal?.sections?.["3_hypotheses"]?.hypothesis_3 || globalState.hypotheses[2]
+                          ].map((h: any, i) => {
+                            if (!h || !h.title) return null;
+                            const title = h.title;
+                            const statement = typeof h.statement === 'string' ? h.statement : h.statement?.if_then_because;
+                            const nullHyp = h.null_hyp || h.statement?.H0;
+                            const altHyp = h.alt_hyp || h.statement?.H1;
+                            return (
+                              <div key={i} className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-lg flex flex-col gap-2 animate-fade-in">
+                                <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
+                                  <span className="w-1.5 h-3 bg-purple-500 rounded-full" />
+                                  H{i + 1}: {title}
+                                </span>
+                                <p className="text-xs text-zinc-300 font-calendas italic leading-relaxed pl-3 border-l border-zinc-850">
+                                  "{statement}"
+                                </p>
+                                <div className="grid grid-cols-2 gap-3 text-[10px] text-zinc-500 mt-1 font-light leading-normal border-t border-zinc-900/60 pt-2">
+                                  <div>
+                                    <strong className="text-zinc-400 block text-[9px] uppercase font-mono mb-0.5">H₀ (Null)</strong>
+                                    {nullHyp}
+                                  </div>
+                                  <div>
+                                    <strong className="text-zinc-400 block text-[9px] uppercase font-mono mb-0.5">H₁ (Alternative)</strong>
+                                    {altHyp}
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <strong className="text-zinc-400 block text-[9px] uppercase font-mono mb-0.5">H₁ (Alternative)</strong>
-                                {h.alt_hyp}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2.5 animate-pulse opacity-25 mt-1.5">
+                          <div className="h-10 bg-zinc-900 border border-zinc-900/60 rounded-lg w-full" />
+                          <div className="h-10 bg-zinc-900 border border-zinc-900/60 rounded-lg w-full" />
+                        </div>
+                      )}
                     </section>
 
                     {/* Section 4: Methodology */}
@@ -720,26 +946,39 @@ export default function App() {
                         <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">4. Experimental Protocols</h3>
                         <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">METHODOLOGY AGENT</span>
                       </div>
-                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
-                        {globalState.proposal.sections["4_methodology"].overview}
-                      </p>
                       
-                      <div className="mt-2 p-4 bg-zinc-900/30 border border-zinc-900 rounded-lg flex flex-col gap-3.5">
-                        <span className="font-bold text-purple-400 text-xs font-mono uppercase tracking-wide">
-                          Prioritized Protocol (E1): {globalState.proposal.sections["4_methodology"].primary_experiment?.study_design}
-                        </span>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-light text-zinc-400 leading-relaxed">
-                          <div>
-                            <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Sample Size & Power Analysis</strong>
-                            {globalState.proposal.sections["4_methodology"].primary_experiment?.participants_or_subjects?.sample_size}
-                          </div>
-                          <div>
-                            <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Blinding Standard</strong>
-                            {globalState.proposal.sections["4_methodology"].primary_experiment?.procedure?.blinding}
-                          </div>
+                      {globalState?.experiments && globalState.experiments.length > 0 ? (
+                        <div className="flex flex-col gap-3 animate-fade-in">
+                          <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
+                            {globalState.proposal?.sections?.["4_methodology"]?.overview || `The experimental design is optimized for testing formulated hypotheses using quantitative empirical protocols. Three separate designs (E1, E2, E3) have been developed by the Methodology Agent.`}
+                          </p>
+                          
+                          {(() => {
+                            const exp = globalState.proposal?.sections?.["4_methodology"]?.primary_experiment || globalState.experiments[0];
+                            if (!exp) return null;
+                            return (
+                              <div className="mt-2 p-4 bg-zinc-900/30 border border-zinc-900 rounded-lg flex flex-col gap-3.5">
+                                <span className="font-bold text-purple-400 text-xs font-mono uppercase tracking-wide">
+                                  Prioritized Protocol (E1): {exp.study_design}
+                                </span>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-light text-zinc-400 leading-relaxed">
+                                  <div>
+                                    <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Sample Size & Power Analysis</strong>
+                                    {exp.participants_or_subjects?.sample_size || exp.participants_or_subjects?.power_analysis}
+                                  </div>
+                                  <div>
+                                    <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Blinding Standard</strong>
+                                    {exp.procedure?.blinding}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
-                      </div>
+                      ) : (
+                        <div className="h-14 bg-zinc-900 border border-zinc-900/60 rounded-lg w-full animate-pulse opacity-25 mt-1.5" />
+                      )}
                     </section>
 
                     {/* Section 5: Ethics */}
@@ -748,9 +987,29 @@ export default function App() {
                         <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">5. Ethical Disclosures</h3>
                         <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">CRITIQUE AGENT</span>
                       </div>
-                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
-                        {globalState.proposal.sections["5_ethical_considerations"]}
-                      </p>
+                      {globalState?.proposal?.sections?.["5_ethical_considerations"] || (globalState?.critique?.per_hypothesis && globalState.critique.per_hypothesis.length > 0) ? (
+                        <div className="flex flex-col gap-2 animate-fade-in">
+                          <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
+                            {globalState.proposal?.sections?.["5_ethical_considerations"] || `Ethical assessment has been performed for each hypothesis and design strategy. No blocking fatal flaws were identified, and appropriate IRB/ethics oversight recommendations have been compiled.`}
+                          </p>
+                          {!globalState.proposal?.sections?.["5_ethical_considerations"] && globalState.critique.per_hypothesis.map((crit, idx) => (
+                            <div key={idx} className="p-2.5 bg-zinc-900/10 border border-zinc-900 rounded text-[11px] text-zinc-400 mt-1.5">
+                              <strong className="text-zinc-300 font-mono text-[9px] uppercase">H{idx+1} Ethical Assessment (Intermediate)</strong>
+                              <div className="flex gap-4 mt-1 font-mono text-[9px]">
+                                <span className={crit.ethical_assessment?.irb_required ? "text-red-400" : "text-green-400"}>
+                                  IRB Required: {crit.ethical_assessment?.irb_required ? "YES" : "NO"}
+                                </span>
+                                <span className={crit.ethical_assessment?.animal_welfare_issues ? "text-yellow-400" : "text-green-400"}>
+                                  Animal Welfare Concerns: {crit.ethical_assessment?.animal_welfare_issues ? "YES" : "NO"}
+                                </span>
+                              </div>
+                              <p className="mt-1 italic">Recommendation: {crit.ethical_assessment?.recommendation}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="h-8 bg-zinc-900 border border-zinc-900/60 rounded-lg w-full animate-pulse opacity-20 mt-1.5" />
+                      )}
                     </section>
 
                     {/* Section 6: Timeline & Budget */}
@@ -759,21 +1018,50 @@ export default function App() {
                         <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">6. Resource Projection</h3>
                         <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">SYNTHESIZER</span>
                       </div>
-                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
-                        {globalState.proposal.sections["6_timeline_and_budget"]}
-                      </p>
+                      {globalState?.proposal?.sections?.["6_timeline_and_budget"] || (globalState?.experiments && globalState.experiments.length > 0) ? (
+                        <div className="flex flex-col gap-2.5 animate-fade-in">
+                          <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
+                            {globalState.proposal?.sections?.["6_timeline_and_budget"] || `Resource projections compiled from intermediate experimental protocols. The table below represents estimated durations and costs.`}
+                          </p>
+                          {!globalState.proposal?.sections?.["6_timeline_and_budget"] && (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1.5">
+                              {globalState.experiments.map((e, idx) => (
+                                <div key={idx} className="p-2 bg-zinc-900/20 border border-zinc-900 rounded text-[10px]">
+                                  <strong className="text-zinc-400 block font-mono text-[9px] uppercase">E{idx+1} Cost & Timeline</strong>
+                                  <div className="mt-1 font-mono">Cost: <span className="text-purple-400 font-bold">{e.budget_estimate?.total_estimated}</span></div>
+                                  <div className="font-mono">Duration: <span className="text-white">{e.timeline?.total_duration}</span></div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="h-8 bg-zinc-900 border border-zinc-900/60 rounded-lg w-full animate-pulse opacity-20 mt-1.5" />
+                      )}
                     </section>
 
                     {/* Section 10: References */}
                     <section className="flex flex-col gap-3 border-t border-zinc-900 pt-6 mt-4">
                       <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">References</h3>
-                      <ul className="text-[10px] text-zinc-500 font-mono flex flex-col gap-2 list-none pl-0 leading-relaxed">
-                        {globalState.proposal.sections["10_references"].map((ref, idx) => (
-                          <li key={idx} className="pl-6 -indent-6 text-justify">
-                            {ref}
-                          </li>
-                        ))}
-                      </ul>
+                      {globalState?.proposal?.sections?.["10_references"] || (globalState?.literature?.papers && globalState.literature.papers.length > 0) ? (
+                        <ul className="text-[10px] text-zinc-500 font-mono flex flex-col gap-2 list-none pl-0 leading-relaxed animate-fade-in">
+                          {(globalState.proposal?.sections?.["10_references"] || 
+                            globalState.literature.papers.map((p) => {
+                              const authorLastName = p.authors?.[0]?.split(",")?.[0]?.trim() || "Unknown";
+                              return `${authorLastName} et al. (${p.year}). ${p.title}. ${p.venue}.`;
+                            })
+                          ).map((ref, idx) => (
+                            <li key={idx} className="pl-6 -indent-6 text-justify">
+                              {ref}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 animate-pulse opacity-20 mt-1.5 font-mono">
+                          <div className="h-2 bg-zinc-900 rounded w-5/6" />
+                          <div className="h-2 bg-zinc-900 rounded w-4/5" />
+                        </div>
+                      )}
                     </section>
                   </article>
                 )}
@@ -785,16 +1073,31 @@ export default function App() {
               {/* Context Selector Tabs */}
               <div className="p-1.5 bg-zinc-950 border border-zinc-900 rounded-xl flex gap-1">
                 {[
-                  { id: "papers", label: "Papers", icon: Database },
-                  { id: "protocols", label: "Protocols", icon: FlaskConical },
-                  { id: "critiques", label: "Critique", icon: ShieldAlert }
+                  { 
+                    id: "papers", 
+                    label: "Papers", 
+                    icon: Database, 
+                    available: !!(globalState?.literature?.papers && globalState.literature.papers.length > 0) 
+                  },
+                  { 
+                    id: "protocols", 
+                    label: "Protocols", 
+                    icon: FlaskConical, 
+                    available: !!(globalState?.experiments && globalState.experiments.length > 0) 
+                  },
+                  { 
+                    id: "critiques", 
+                    label: "Critique", 
+                    icon: ShieldAlert, 
+                    available: !!(globalState?.critique?.per_hypothesis && globalState.critique.per_hypothesis.length > 0) 
+                  }
                 ].map((t) => {
                   const Icon = t.icon;
                   return (
                     <button
                       key={t.id}
                       onClick={() => setActiveInspectorTab(t.id as any)}
-                      disabled={!globalState}
+                      disabled={!t.available}
                       className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer ${
                         activeInspectorTab === t.id
                           ? "bg-zinc-900 text-white border border-zinc-800"
@@ -989,6 +1292,7 @@ export default function App() {
             <span>Workbench Status: Operational &bull; Sequentially Synchronized Agents</span>
             <span>&copy; {new Date().getFullYear()} Autonomous Research Lab</span>
           </footer>
+          <Dock items={dockItems} />
         </div>
       )}
     </div>

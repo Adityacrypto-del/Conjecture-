@@ -232,57 +232,12 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
     // Auto-rotation timer
     const rotationTimer = d3.timer(rotate)
 
-    const handleMouseDown = (event: MouseEvent) => {
-      autoRotate = false
-      const startX = event.clientX
-      const startY = event.clientY
-      const startRotation = [...rotation]
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const sensitivity = 0.5
-        const dx = moveEvent.clientX - startX
-        const dy = moveEvent.clientY - startY
-
-        rotation[0] = startRotation[0] + dx * sensitivity
-        rotation[1] = startRotation[1] - dy * sensitivity
-        rotation[1] = Math.max(-90, Math.min(90, rotation[1]))
-
-        projection.rotate(rotation as [number, number, number])
-        render()
-      }
-
-      const handleMouseUp = () => {
-        document.removeEventListener("mousemove", handleMouseMove)
-        document.removeEventListener("mouseup", handleMouseUp)
-
-        setTimeout(() => {
-          autoRotate = true
-        }, 10)
-      }
-
-      document.addEventListener("mousemove", handleMouseMove)
-      document.addEventListener("mouseup", handleMouseUp)
-    }
-
-    const handleWheel = (event: WheelEvent) => {
-      event.preventDefault()
-      const scaleFactor = event.deltaY > 0 ? 0.9 : 1.1
-      const newRadius = Math.max(radius * 0.5, Math.min(radius * 3, projection.scale() * scaleFactor))
-      projection.scale(newRadius)
-      render()
-    }
-
-    canvas.addEventListener("mousedown", handleMouseDown)
-    canvas.addEventListener("wheel", handleWheel)
-
     // Load the world data
     loadWorldData()
 
     // Cleanup
     return () => {
       rotationTimer.stop()
-      canvas.removeEventListener("mousedown", handleMouseDown)
-      canvas.removeEventListener("wheel", handleWheel)
     }
   }, [width, height])
 
@@ -312,9 +267,6 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
         className="w-full h-auto rounded-2xl bg-background dark"
         style={{ maxWidth: "100%", height: "auto" }}
       />
-      <div className="absolute bottom-4 left-4 text-xs text-muted-foreground px-2 py-1 rounded-md dark bg-neutral-900/80 backdrop-blur-sm border border-zinc-800">
-        Drag to rotate • Scroll to zoom
-      </div>
     </div>
   )
 }

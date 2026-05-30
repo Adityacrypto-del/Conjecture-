@@ -18,52 +18,80 @@ async function searchSemanticScholar(query: string): Promise<any[]> {
   }
 }
 
-// Main Gemini query helper
-async function queryGemini(apiKey: string, model: string, prompt: string): Promise<any> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  
-  const payload: any = {
-    contents: [
-      {
-        parts: [{ text: prompt }]
-      }
-    ],
-    generationConfig: {
-      responseMimeType: "application/json"
+// Unified query helper for Gemini and Groq
+async function queryLLM(
+  provider: "gemini" | "groq",
+  apiKey: string,
+  model: string,
+  prompt: string
+): Promise<any> {
+  if (provider === "groq") {
+    const url = "https://api.groq.com/openai/v1/chat/completions";
+    const payload = {
+      model,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" }
+    };
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(
+        err?.error?.message || `Groq API returned status ${response.status}`
+      );
     }
-  };
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData?.error?.message || `Gemini API returned status ${response.status}`
-    );
-  }
-
-  const result = await response.json();
-  const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty response from Gemini API");
-  
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    console.error("Failed to parse Gemini output as JSON. Output was:", text);
-    throw new Error("Gemini response was not valid JSON");
+    const result = await response.json();
+    const text = result?.choices?.[0]?.message?.content;
+    if (!text) throw new Error("Empty response from Groq API");
+    
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("Failed to parse Groq response as JSON. Output was:", text);
+      throw new Error("Groq response was not valid JSON");
+    }
+  } else {
+    // Gemini
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const payload: any = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    };
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData?.error?.message || `Gemini API returned status ${response.status}`
+      );
+    }
+    const result = await response.json();
+    const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("Empty response from Gemini API");
+    
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("Failed to parse Gemini response as JSON. Output was:", text);
+      throw new Error("Gemini response was not valid JSON");
+    }
   }
 }
 
 export async function runFullResearchPipeline(
+  provider: "gemini" | "groq",
   question: string,
   apiKey: string,
-  model: string = "gemini-1.5-flash",
+  model: string = "gemini-2.5-flash",
   onProgress: (step: string, message: string, state?: Partial<GlobalState>) => void
 ): Promise<GlobalState> {
   onProgress("orchestrator_parse", "Parsing research question and extracting variables...");
@@ -93,7 +121,7 @@ export async function runFullResearchPipeline(
     }
   `;
 
-  const parsedQuery = await queryGemini(apiKey, model, parsePrompt);
+  const parsedQuery = await queryLLM(provider, apiKey, model, parsePrompt);
   
   // Construct starting state
   let globalState: GlobalState = {
@@ -185,7 +213,7 @@ export async function runFullResearchPipeline(
     }
   `;
 
-  const literatureResults = await queryGemini(apiKey, model, litPrompt);
+  const literatureResults = await queryLLM(provider, apiKey, model, litPrompt);
   globalState.literature = literatureResults;
 
   onProgress("hypothesis_agent", "Generating testable and falsifiable hypotheses...", globalState);
@@ -243,7 +271,7 @@ export async function runFullResearchPipeline(
     }
   `;
 
-  const hypotheses = await queryGemini(apiKey, model, hypPrompt);
+  const hypotheses = await queryLLM(provider, apiKey, model, hypPrompt);
   globalState.hypotheses = hypotheses;
 
   onProgress("experiment_agent", "Designing experimental protocols and methodologies...", globalState);
@@ -326,7 +354,7 @@ export async function runFullResearchPipeline(
     }
   `;
 
-  const experiments = await queryGemini(apiKey, model, expPrompt);
+  const experiments = await queryLLM(provider, apiKey, model, expPrompt);
   globalState.experiments = experiments;
 
   onProgress("critique_agent", "Performing peer-review and ethical critique of the proposal...", globalState);
@@ -415,7 +443,7 @@ export async function runFullResearchPipeline(
     }
   `;
 
-  const critique = await queryGemini(apiKey, model, critPrompt);
+  const critique = await queryLLM(provider, apiKey, model, critPrompt);
   globalState.critique = critique;
 
   onProgress("proposal_synthesizer", "Synthesizing the final proposal document...", globalState);
@@ -470,7 +498,7 @@ export async function runFullResearchPipeline(
   `;
 
   // Make sure to pass correct references and align experiments
-  const proposalResults = await queryGemini(apiKey, model, synthPrompt);
+  const proposalResults = await queryLLM(provider, apiKey, model, synthPrompt);
   globalState.proposal = proposalResults;
 
   onProgress("completed", "Pipeline completed successfully!", globalState);
