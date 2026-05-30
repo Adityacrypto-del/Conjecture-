@@ -2,10 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { GooeyDemo } from "@/components/ui/demo";
 import { generateOfflineProposal } from "@/lib/simulator";
 import { runFullResearchPipeline } from "@/lib/gemini";
-import type { GlobalState, PipelineStep, LogEntry, HypothesisObject, ExperimentObject } from "@/lib/types";
+import type { GlobalState, PipelineStep, LogEntry } from "@/lib/types";
 import {
   BookOpen,
-  Lightbulb,
   FlaskConical,
   ShieldAlert,
   FileText,
@@ -15,21 +14,14 @@ import {
   Cpu,
   Play,
   Download,
-  CheckCircle,
-  AlertCircle,
-  ChevronRight,
   RefreshCw,
   Search,
   Database,
-  Calendar,
-  DollarSign,
-  Award,
-  Activity,
   Copy,
   Check,
-  Info,
   Layers,
-  ArrowLeft
+  ArrowLeft,
+  HelpCircle
 } from "lucide-react";
 
 export default function App() {
@@ -47,14 +39,15 @@ export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [progressPercent, setProgressPercent] = useState(0);
 
-  // Active tabs & toggles in Dashboard
-  const [activeTab, setActiveTab] = useState<"overview" | "literature" | "hypotheses" | "experiments" | "critique" | "proposal">("overview");
-  const [selectedHypothesisIndex, setSelectedHypothesisIndex] = useState(0);
-  const [selectedExperimentIndex, setSelectedExperimentIndex] = useState(0);
+  // Inspector States
+  const [activeInspectorTab, setActiveInspectorTab] = useState<"papers" | "protocols" | "critiques">("papers");
+  const [selectedHypIndex, setSelectedHypIndex] = useState(0);
+  const [selectedExpIndex, setSelectedExpIndex] = useState(0);
   const [copied, setCopied] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const manuscriptRef = useRef<HTMLDivElement>(null);
 
   // Auto scroll logs
   useEffect(() => {
@@ -98,46 +91,43 @@ export default function App() {
     setLogs([]);
     setGlobalState(null);
     setProgressPercent(15);
-    setActiveTab("overview");
 
-    addLog("Orchestrator", `Initializing pipeline for session.`, "info");
-    addLog("Orchestrator", `Research question parsed: "${question}"`, "success");
+    addLog("Orchestrator", `Initializing sequential research pipeline.`, "info");
+    addLog("Orchestrator", `Target Inquiry: "${question}"`, "success");
 
     if (!useRealApi) {
       // Offline Simulated Mode
       try {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((resolve) => setTimeout(resolve, 1200));
         
         setStep("literature_agent");
         setProgressPercent(35);
-        addLog("Literature Agent", "Initiating literature retrieval via simulated Semantic Scholar...", "info");
-        addLog("Literature Agent", "Formulating primary, secondary, and tertiary search parameters.", "info");
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        addLog("Literature Agent", "Successfully retrieved and scored 5 high-relevance papers (score >= 7).", "success");
-        addLog("Literature Agent", "Synthesized literature, formulated 3 knowledge gaps, and resolved 1 contradiction.", "success");
+        addLog("Literature Agent", "Sourcing databases and scoring primary literature...", "info");
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        addLog("Literature Agent", "Identified 5 relevant studies. Synthesized knowledge base and gaps.", "success");
         
         setStep("hypothesis_agent");
         setProgressPercent(55);
-        addLog("Hypothesis Agent", "Creating novel, falsifiable hypotheses based on literature synthesis...", "info");
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        addLog("Hypothesis Agent", "Created H1 (Gap-filling), H2 (Mechanistic), and H3 (Contrarian). Checked evidence anchors.", "success");
+        addLog("Hypothesis Agent", "Formulating testable alternative (H1) and null (H0) hypotheses...", "info");
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        addLog("Hypothesis Agent", "Mapped evidence trees for 3 distinct hypothesis angles.", "success");
         
         setStep("experiment_agent");
         setProgressPercent(75);
-        addLog("Experiment Agent", "Developing detailed experimental protocols and statistical power analyses...", "info");
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        addLog("Experiment Agent", "Completed experimental designs E1 (Factorial), E2 (In-Vitro), E3 (Cohort). Rationale compiled.", "success");
+        addLog("Experiment Agent", "Drafting experimental protocols, budgets, and power analyses...", "info");
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        addLog("Experiment Agent", "Created E1, E2, and E3 protocols. Factored potential confounding factors.", "success");
         
         setStep("critique_agent");
         setProgressPercent(90);
-        addLog("Critique Agent", "Evaluating hypotheses and experiment designs for scientific rigor and ethical concerns...", "info");
-        await new Promise((resolve) => setTimeout(resolve, 1800));
-        addLog("Critique Agent", "Critique complete. Score: 8.3/10. Recommended sequence: H1 -> H3 -> H2.", "success");
+        addLog("Critique Agent", "Evaluating design rigor, technical feasibility, and ethical safeguards...", "info");
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        addLog("Critique Agent", "Critique complete. Average Rigor Score: 8.3/10. Priority order indexed.", "success");
         
         setStep("proposal_synthesizer");
         setProgressPercent(97);
-        addLog("Synthesizer", "Generating academic research proposal outline and references...", "info");
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        addLog("Synthesizer", "Compiling final APA-formatted research manuscript...", "info");
+        await new Promise((resolve) => setTimeout(resolve, 1200));
         
         const finalState = generateOfflineProposal(question);
         setGlobalState(finalState);
@@ -246,1166 +236,758 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const getStepBadgeColor = (badgeStep: PipelineStep) => {
-    if (step === badgeStep) return "bg-purple-500/20 text-purple-400 border-purple-500/50 animate-pulse";
-    if (step === "completed" || getStepProgress(step) > getStepProgress(badgeStep)) {
-      return "bg-green-500/20 text-green-400 border-green-500/50";
+  const getStepColor = (nodeStep: PipelineStep) => {
+    if (step === nodeStep) return "text-purple-400 border-purple-500 bg-purple-950/30 shadow-[0_0_15px_rgba(168,85,247,0.2)]";
+    if (step === "completed" || getStepProgress(step) > getStepProgress(nodeStep)) {
+      return "text-zinc-300 border-zinc-700 bg-zinc-900";
     }
-    return "bg-zinc-800/50 text-zinc-500 border-zinc-700/50";
+    return "text-zinc-600 border-zinc-900 bg-black/40";
+  };
+
+  const renderRadialScore = (score: number, max: number, label: string) => {
+    const radius = 22;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (score / max) * circumference;
+
+    return (
+      <div className="flex items-center gap-3 bg-zinc-900/30 border border-zinc-900 p-3 rounded-xl">
+        <div className="relative w-14 h-14 flex items-center justify-center">
+          <svg className="w-full h-full -rotate-90">
+            <circle cx="28" cy="28" r={radius} className="stroke-zinc-800" strokeWidth="3" fill="transparent" />
+            <circle
+              cx="28"
+              cy="28"
+              r={radius}
+              className="stroke-purple-500 transition-all duration-1000"
+              strokeWidth="3.5"
+              fill="transparent"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+            />
+          </svg>
+          <span className="absolute text-xs font-mono font-bold text-white">{score}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">{label}</span>
+          <span className="text-xs text-zinc-300 font-semibold">
+            {score >= 8.5 ? "Excellent" : score >= 7.0 ? "Satisfactory" : "Needs Work"}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  const fillTemplate = (text: string) => {
+    setQuestion(text);
   };
 
   return (
-    <div className="w-full min-h-screen bg-black text-gray-200 selection:bg-purple-500/30 overflow-x-hidden">
+    <div className="w-full min-h-screen bg-black text-gray-200 selection:bg-purple-500/30 overflow-x-hidden font-sans">
       {view === "landing" ? (
         <GooeyDemo onStart={() => setView("app")} />
       ) : (
         <div className="flex flex-col min-h-screen">
-          {/* Header Banner */}
-          <header className="sticky top-0 z-40 w-full border-b border-zinc-800 bg-black/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          {/* Header Banner - Minimal and high contrast */}
+          <header className="sticky top-0 z-40 w-full border-b border-zinc-900 bg-black/90 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
               <button
                 onClick={() => setView("landing")}
-                className="p-2 hover:bg-zinc-800 rounded-full transition-colors group"
+                className="p-2 hover:bg-zinc-900 border border-zinc-900 rounded-lg transition-all group"
                 title="Back to Landing Page"
               >
-                <ArrowLeft className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                <ArrowLeft className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
               </button>
               <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold font-overusedGrotesk tracking-tight text-white">
-                    PS-AG8
-                  </span>
-                  <span className="px-2 py-0.5 text-[10px] font-medium tracking-wider bg-purple-500/20 text-purple-300 rounded border border-purple-500/30 font-mono">
-                    ACTIVE PIPELINE
+                <span className="text-sm font-bold font-overusedGrotesk tracking-wide text-white uppercase">
+                  MANUSCRIPT WORKBENCH
+                </span>
+                <span className="text-[10px] text-zinc-500 uppercase font-mono tracking-wider">
+                  PS-AG8 Research Engine
+                </span>
+              </div>
+            </div>
+
+            {/* Micro horizontal node pipeline */}
+            <div className="hidden md:flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-zinc-900 bg-zinc-950/60">
+              {[
+                { id: "orchestrator_parse", name: "Parse" },
+                { id: "literature_agent", name: "Literature" },
+                { id: "hypothesis_agent", name: "Hypothesis" },
+                { id: "experiment_agent", name: "Methods" },
+                { id: "critique_agent", name: "Critique" },
+                { id: "proposal_synthesizer", name: "Compile" }
+              ].map((n, idx) => (
+                <div key={n.id} className="flex items-center gap-1.5">
+                  {idx > 0 && <span className="text-zinc-800 text-[10px]">&rarr;</span>}
+                  <span className={`text-[10px] px-2 py-0.5 rounded border font-mono ${getStepColor(n.id as PipelineStep)}`}>
+                    {n.name}
                   </span>
                 </div>
-                <span className="text-xs text-zinc-500">Autonomous Scientific Proposal Generator</span>
-              </div>
+              ))}
             </div>
 
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowConfig(!showConfig)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm hover:text-white transition-all cursor-pointer"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs hover:text-white transition-all cursor-pointer font-mono"
               >
-                <Settings className={`w-4 h-4 transition-transform duration-500 ${showConfig ? "rotate-90" : ""}`} />
-                <span>Engine Config</span>
+                <Settings className={`w-3.5 h-3.5 transition-transform duration-500 ${showConfig ? "rotate-90" : ""}`} />
+                <span>CONFIG</span>
               </button>
 
               <button
                 onClick={triggerPipeline}
                 disabled={step !== "idle" && step !== "completed" && step !== "error"}
-                className={`flex items-center gap-2 px-5 py-2 rounded-full font-medium text-sm transition-all shadow-[0_0_20px_rgba(147,51,234,0.15)] ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${
                   step !== "idle" && step !== "completed" && step !== "error"
-                    ? "bg-purple-950/40 text-purple-400 border border-purple-500/30 cursor-not-allowed"
-                    : "bg-purple-600 hover:bg-purple-500 text-white cursor-pointer hover:scale-[1.02]"
+                    ? "bg-purple-950/40 text-purple-400 border border-purple-950/50 cursor-not-allowed"
+                    : "bg-white hover:bg-zinc-200 text-black cursor-pointer hover:scale-[1.02]"
                 }`}
               >
                 {step !== "idle" && step !== "completed" && step !== "error" ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Synthesizing...</span>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Processing</span>
                   </>
                 ) : (
                   <>
-                    <Play className="w-4 h-4 fill-white" />
-                    <span>Execute Pipeline</span>
+                    <Play className="w-3.5 h-3.5 fill-black" />
+                    <span>Run Engine</span>
                   </>
                 )}
               </button>
             </div>
           </header>
 
-          {/* Config Panel Drawer */}
+          {/* Micro Progress Bar */}
+          {step !== "idle" && step !== "completed" && step !== "error" && (
+            <div className="w-full bg-zinc-950 h-0.5 relative z-40 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 h-full transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          )}
+
+          {/* Config Drawer */}
           {showConfig && (
-            <div className="w-full border-b border-zinc-800 bg-zinc-950/90 px-8 py-6 transition-all duration-300 animate-in slide-in-from-top">
-              <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Cpu className="w-4 h-4 text-purple-400" />
-                    Execution Model
+            <div className="w-full border-b border-zinc-900 bg-zinc-950 px-8 py-5 transition-all duration-300 animate-in slide-in-from-top">
+              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-purple-400" />
+                    Engine Mode
                   </label>
-                  <p className="text-xs text-zinc-500 mb-1">Select agent engine backend.</p>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mt-1">
                     <button
                       onClick={() => setUseRealApi(false)}
-                      className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                      className={`flex-1 py-1.5 rounded text-[10px] uppercase font-mono font-bold border transition-all ${
                         !useRealApi
                           ? "bg-purple-500/10 border-purple-500 text-purple-300"
-                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700"
                       }`}
                     >
-                      Simulation Mode (Offline)
+                      Offline Simulation
                     </button>
                     <button
                       onClick={() => setUseRealApi(true)}
-                      className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                      className={`flex-1 py-1.5 rounded text-[10px] uppercase font-mono font-bold border transition-all ${
                         useRealApi
                           ? "bg-purple-500/10 border-purple-500 text-purple-300"
-                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700"
                       }`}
                     >
-                      Gemini API Mode (Live)
+                      Live Gemini API
                     </button>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Key className="w-4 h-4 text-purple-400" />
-                    Gemini API Key
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-purple-400" />
+                    Google Gemini API Key
                   </label>
-                  <p className="text-xs text-zinc-500 mb-1">Stored securely in-memory only.</p>
                   <input
                     type="password"
                     disabled={!useRealApi}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={useRealApi ? "AIzaSy..." : "API key disabled in Simulation Mode"}
-                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs focus:outline-none focus:border-purple-500 disabled:opacity-50 text-white"
+                    placeholder={useRealApi ? "AIzaSy..." : "Disabled (Simulation Mode active)"}
+                    className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs focus:outline-none focus:border-purple-500 disabled:opacity-50 text-white font-mono"
                   />
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Settings className="w-4 h-4 text-purple-400" />
-                    Live LLM Selection
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <Settings className="w-3.5 h-3.5 text-purple-400" />
+                    Model Target
                   </label>
-                  <p className="text-xs text-zinc-500 mb-1">Choose model temperature and capability.</p>
                   <select
                     disabled={!useRealApi}
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs focus:outline-none focus:border-purple-500 text-white disabled:opacity-50"
+                    className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs focus:outline-none focus:border-purple-500 text-white disabled:opacity-50 font-mono"
                   >
-                    <option value="gemini-1.5-flash">Gemini 1.5 Flash (Recommended - Speed)</option>
-                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (High Quality)</option>
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Research)</option>
+                    <option value="gemini-1.5-flash">gemini-1.5-flash (fast)</option>
+                    <option value="gemini-2.5-flash">gemini-2.5-flash (recommended)</option>
+                    <option value="gemini-2.5-pro">gemini-2.5-pro (deep research)</option>
                   </select>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Main workspace layout */}
-          <main className="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+          {/* Three-Column Workspace */}
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 items-stretch max-w-8xl w-full mx-auto">
             
-            {/* Input & Control Column (Left 4 cols) */}
-            <div className="lg:col-span-4 flex flex-col gap-6 h-full">
-              {/* Card 1: Input Setup */}
-              <div className="p-6 bg-zinc-950 border border-zinc-800 rounded-xl flex flex-col gap-4">
-                <h3 className="text-base font-bold text-white font-overusedGrotesk flex items-center gap-2">
-                  <Search className="w-4 h-4 text-purple-400" />
-                  Research Inquiry
+            {/* COLUMN 1: CONTROLS & PARSED VARIABLES (3 Columns) */}
+            <aside className="lg:col-span-3 flex flex-col gap-5 h-full">
+              {/* Setup Panel */}
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-xl flex flex-col gap-4">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <Search className="w-3.5 h-3.5 text-purple-400" />
+                  Thesis Parameter
                 </h3>
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs text-zinc-400">Specify your thesis topic or research question:</label>
-                  <textarea
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    rows={4}
-                    disabled={step !== "idle" && step !== "completed" && step !== "error"}
-                    placeholder="Enter scientific question..."
-                    className="w-full p-3 bg-zinc-900 border border-zinc-800 rounded-lg text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:opacity-50 text-white resize-none"
-                  />
-                </div>
                 
+                <textarea
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  rows={4}
+                  disabled={step !== "idle" && step !== "completed" && step !== "error"}
+                  className="w-full p-3 bg-zinc-900/60 border border-zinc-800 rounded-lg text-xs focus:outline-none focus:border-purple-500 disabled:opacity-50 text-white resize-none font-light leading-relaxed"
+                  placeholder="Formulate your query..."
+                />
+
+                {/* Sourcing templates */}
                 {step === "idle" && (
-                  <div className="p-3 bg-purple-950/20 rounded-lg border border-purple-500/10 text-xs text-purple-300 leading-relaxed flex gap-2">
-                    <Info className="w-4 h-4 flex-shrink-0 text-purple-400 mt-0.5" />
-                    <span>
-                      Press <strong>Execute Pipeline</strong> to trigger our multi-agent workflow sequentially: Parse → Retrieve → Hypothesize → Design → Critique → Synthesize.
-                    </span>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[9px] text-zinc-500 font-mono uppercase">Quick-load templates:</span>
+                    <div className="flex flex-col gap-1">
+                      {[
+                        { label: "LLM Hallucinations", query: "What decoding parameters mitigate factual hallucinations in retrieval augmented generation?" },
+                        { label: "Soil Microplastics", query: "What is the impact of microplastics on soil microbiome diversity?" },
+                        { label: "VR Cognitive Load", query: "Does cognitive load increase in immersive virtual reality learning environments?" }
+                      ].map((t, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => fillTemplate(t.query)}
+                          className="w-full text-left px-2.5 py-1.5 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 rounded text-[10px] text-zinc-400 hover:text-white truncate transition-all cursor-pointer font-light"
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Card 2: Pipeline Visualizer */}
-              <div className="p-6 bg-zinc-950 border border-zinc-800 rounded-xl flex flex-col gap-4">
-                <h3 className="text-base font-bold text-white font-overusedGrotesk flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-purple-400" />
-                  Pipeline Sequence
-                </h3>
-                
-                {/* Progress bar */}
-                <div className="w-full bg-zinc-900 h-2 rounded-full overflow-hidden">
-                  <div
-                    className="bg-gradient-to-r from-purple-600 via-pink-500 to-indigo-500 h-full transition-all duration-500"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-2 mt-2">
-                  {[
-                    { id: "orchestrator_parse", name: "1. Orchestrator Parser", desc: "Queries structure mapping" },
-                    { id: "literature_agent", name: "2. Literature Agent", desc: "Retrives & synthesizes papers" },
-                    { id: "hypothesis_agent", name: "3. Hypothesis Agent", desc: "Formulates If-Then-Because" },
-                    { id: "experiment_agent", name: "4. Methodologist Agent", desc: "Designs experimental protocol" },
-                    { id: "critique_agent", name: "5. Critique Agent", desc: "Validates rigor & ethics" },
-                    { id: "proposal_synthesizer", name: "6. Synthesizer", desc: "Compiles PDF-ready output" }
-                  ].map((s) => (
-                    <div
-                      key={s.id}
-                      className={`p-3 rounded-lg border text-xs flex justify-between items-center transition-all ${getStepBadgeColor(s.id as PipelineStep)}`}
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-semibold">{s.name}</span>
-                        <span className="text-[10px] opacity-70 mt-0.5">{s.desc}</span>
-                      </div>
-                      <ChevronRight className="w-4 h-4 opacity-50" />
+              {/* Parsed query state */}
+              {globalState && (
+                <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-xl flex flex-col gap-4">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-purple-400" />
+                    Structured Variables
+                  </h3>
+                  
+                  <div className="flex flex-col gap-3.5 text-[11px] leading-relaxed">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[9px] text-zinc-500 font-mono uppercase">Domain / Subfield</span>
+                      <span className="text-white font-medium">{globalState.parsed_query.domain} / <em className="text-zinc-400">{globalState.parsed_query.subdomain}</em></span>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Card 3: Execution Terminal */}
-              <div className="flex-1 p-6 bg-zinc-950 border border-zinc-800 rounded-xl flex flex-col gap-4 min-h-[220px]">
-                <h3 className="text-base font-bold text-white font-overusedGrotesk flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-purple-400" />
-                  Orchestrator Logs
+                    <div className="border-t border-zinc-900 pt-2 flex flex-col gap-1.5">
+                      <span className="text-[9px] text-zinc-500 font-mono uppercase flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                        Independent Variable
+                      </span>
+                      <span className="text-zinc-300 font-light">{globalState.parsed_query.variables.independent[0]}</span>
+                    </div>
+
+                    <div className="border-t border-zinc-900 pt-2 flex flex-col gap-1.5">
+                      <span className="text-[9px] text-zinc-500 font-mono uppercase flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        Dependent Variable
+                      </span>
+                      <span className="text-zinc-300 font-light">{globalState.parsed_query.variables.dependent[0]}</span>
+                    </div>
+
+                    <div className="border-t border-zinc-900 pt-2 flex flex-col gap-1.5">
+                      <span className="text-[9px] text-zinc-500 font-mono uppercase flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                        Confounding Variable
+                      </span>
+                      <span className="text-zinc-300 font-light">{globalState.parsed_query.variables.confounding[0]}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Logs Monitor */}
+              <div className="flex-1 p-5 bg-zinc-950 border border-zinc-900 rounded-xl flex flex-col gap-3 min-h-[180px]">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5 text-purple-400" />
+                  Terminal logs
                 </h3>
                 
-                <div className="flex-1 bg-black border border-zinc-900 rounded-lg p-3 font-mono text-[11px] overflow-y-auto max-h-[260px] flex flex-col gap-2">
+                <div className="flex-1 bg-black/60 border border-zinc-900/80 rounded-lg p-3 font-mono text-[10px] overflow-y-auto max-h-[220px] flex flex-col gap-2 shadow-inner">
                   {logs.length === 0 ? (
-                    <span className="text-zinc-600 italic">Terminal ready. Run pipeline to stream agent thoughts...</span>
+                    <span className="text-zinc-700 italic">Workbench standing by. Run engine...</span>
                   ) : (
                     logs.map((log, index) => (
                       <div key={index} className="flex flex-col border-b border-zinc-950 pb-1">
                         <div className="flex items-center gap-1.5 justify-between">
-                          <span className={`font-semibold ${
-                            log.type === "success" ? "text-green-400" :
-                            log.type === "error" ? "text-red-400" :
-                            log.type === "warning" ? "text-yellow-400" : "text-purple-400"
+                          <span className={`font-bold ${
+                            log.type === "success" ? "text-green-500" :
+                            log.type === "error" ? "text-red-500" :
+                            log.type === "warning" ? "text-yellow-500" : "text-purple-400"
                           }`}>
-                            [{log.agent}]
+                            {log.agent.toUpperCase()}
                           </span>
-                          <span className="text-[9px] text-zinc-600">{log.timestamp}</span>
+                          <span className="text-[8px] text-zinc-600">{log.timestamp}</span>
                         </div>
-                        <span className="text-zinc-400 mt-0.5">{log.message}</span>
+                        <span className="text-zinc-400 mt-0.5 font-light leading-normal">{log.message}</span>
                       </div>
                     ))
                   )}
                   <div ref={logsEndRef} />
                 </div>
               </div>
-            </div>
+            </aside>
 
-            {/* Results / Proposal View Column (Right 8 cols) */}
-            <div className="lg:col-span-8 flex flex-col h-full bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden min-h-[500px]">
-              {/* Tab Selector Header */}
-              <div className="w-full bg-zinc-900/60 border-b border-zinc-800 px-6 py-1 flex items-center justify-between overflow-x-auto">
-                <div className="flex gap-2">
-                  {[
-                    { id: "overview", label: "Overview", icon: Layers },
-                    { id: "literature", label: "Literature Review", icon: BookOpen },
-                    { id: "hypotheses", label: "Hypotheses", icon: Lightbulb },
-                    { id: "experiments", label: "Experiment Designs", icon: FlaskConical },
-                    { id: "critique", label: "Ethics & Critique", icon: ShieldAlert },
-                    { id: "proposal", label: "Research Proposal", icon: FileText }
-                  ].map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
-                        disabled={!globalState && tab.id !== "overview"}
-                        className={`flex items-center gap-2 px-4 py-3 border-b-2 text-xs font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer ${
-                          activeTab === tab.id
-                            ? "border-purple-500 text-white"
-                            : "border-transparent text-zinc-400 hover:text-zinc-200"
-                        }`}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
+            {/* COLUMN 2: THE ACADEMIC MANUSCRIPT (6 Columns) */}
+            <section className="lg:col-span-6 flex flex-col bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+              {/* Proposal Header Controls */}
+              <div className="px-6 py-3 bg-zinc-900/30 border-b border-zinc-900 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-white font-mono">DRAFT MANUSCRIPT</span>
                 </div>
+                {globalState && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => copyToClipboard(JSON.stringify(globalState.proposal, null, 2))}
+                      className="px-2.5 py-1 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded text-[10px] font-mono hover:text-white transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copied ? "COPIED" : "JSON"}</span>
+                    </button>
+                    <button
+                      onClick={downloadMarkdown}
+                      className="px-2.5 py-1 bg-white hover:bg-zinc-200 text-black rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>MARKDOWN</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Tab Workspace Body */}
-              <div className="flex-1 p-6 overflow-y-auto max-h-[85vh]">
-                
-                {/* 1. OVERVIEW TAB */}
-                {activeTab === "overview" && (
-                  <div className="flex flex-col gap-6 animate-fade-in">
-                    {!globalState ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
-                        <div className="w-16 h-16 rounded-full bg-purple-500/10 flex items-center justify-center border border-purple-500/20 text-purple-400 animate-bounce">
-                          <Cpu className="w-8 h-8" />
+              {/* Manuscript sheet */}
+              <div ref={manuscriptRef} className="flex-1 p-8 md:p-12 overflow-y-auto max-h-[80vh] bg-zinc-950 text-zinc-300 select-text leading-relaxed text-sm scrollbar-thin">
+                {!globalState ? (
+                  <div className="h-full flex flex-col items-center justify-center py-20 text-center gap-4">
+                    {step === "idle" ? (
+                      <>
+                        <div className="w-12 h-12 rounded-full border border-zinc-800 bg-zinc-900/30 flex items-center justify-center text-zinc-500 animate-pulse">
+                          <BookOpen className="w-6 h-6" />
                         </div>
-                        <h4 className="text-lg font-bold text-white font-overusedGrotesk">
-                          {step === "idle" ? "Autonomous Research Pipeline Ready" : "Executing Research Steps..."}
-                        </h4>
-                        <p className="text-sm text-zinc-400 max-w-md">
-                          {step === "idle"
-                            ? "Input a research topic and click 'Execute Pipeline' in the top right to start the research engine."
-                            : "The orchestrator is invoking agents sequentially to construct the scientific document. Check terminal logs on the left."}
+                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Manuscript Drafting Area</h4>
+                        <p className="text-xs text-zinc-500 max-w-sm font-light">
+                          Configure your parameters and trigger the research pipeline. The generated manuscript draft will compile here in real-time.
                         </p>
-                      </div>
+                      </>
                     ) : (
-                      <div className="flex flex-col gap-6">
-                        {/* Domain card */}
-                        <div className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/30 grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">Academic Domain</span>
-                            <span className="text-sm font-bold text-white">{globalState.parsed_query.domain}</span>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">Sub-discipline</span>
-                            <span className="text-sm font-bold text-white">{globalState.parsed_query.subdomain}</span>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">Research Archetype</span>
-                            <span className="text-sm font-bold text-white capitalize">{globalState.parsed_query.research_type}</span>
-                          </div>
-                        </div>
-
-                        {/* Executive Summary critique */}
-                        <div className="p-6 rounded-xl border border-purple-500/20 bg-purple-950/10 flex flex-col gap-3">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2">
-                              <Award className="w-4 h-4" />
-                              Orchestrated Proposal Summary
-                            </h4>
-                            <div className="px-3 py-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-bold font-mono">
-                              SCORE: {globalState.critique.overall_score}/10
-                            </div>
-                          </div>
-                          <p className="text-sm text-gray-300 leading-relaxed font-light">
-                            {globalState.critique.summary}
-                          </p>
-                          <div className="flex flex-wrap gap-4 mt-2 pt-2 border-t border-purple-500/10 text-xs">
-                            <span className="text-zinc-400">
-                              Best Path: <strong className="text-white">{globalState.critique.best_hypothesis}</strong>
-                            </span>
-                            <span className="text-zinc-400">
-                              Sequence: <strong className="text-white">{globalState.critique.recommended_sequence.join(" → ")}</strong>
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Variables studied */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/10 flex flex-col gap-3">
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                              Independent Variables
-                            </span>
-                            <ul className="text-xs text-zinc-400 flex flex-col gap-1.5 list-disc pl-4">
-                              {globalState.parsed_query.variables.independent.map((v, i) => (
-                                <li key={i}>{v}</li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/10 flex flex-col gap-3">
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              Dependent Variables
-                            </span>
-                            <ul className="text-xs text-zinc-400 flex flex-col gap-1.5 list-disc pl-4">
-                              {globalState.parsed_query.variables.dependent.map((v, i) => (
-                                <li key={i}>{v}</li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/10 flex flex-col gap-3">
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
-                              Confounding Variables
-                            </span>
-                            <ul className="text-xs text-zinc-400 flex flex-col gap-1.5 list-disc pl-4">
-                              {globalState.parsed_query.variables.confounding.map((v, i) => (
-                                <li key={i}>{v}</li>
-                              ))}
-                            </ul>
-                          </div>
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
+                        <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider font-mono animate-pulse">
+                          {step.replace("_", " ").toUpperCase()} ACTIVE
+                        </h4>
+                        
+                        {/* Skeleton manuscript placeholder */}
+                        <div className="w-80 flex flex-col gap-2 mt-4 opacity-30 animate-pulse">
+                          <div className="h-4 bg-zinc-800 rounded w-3/4 mx-auto" />
+                          <div className="h-2 bg-zinc-900 rounded w-1/2 mx-auto mt-2" />
+                          <div className="h-2.5 bg-zinc-800 rounded w-full mt-6" />
+                          <div className="h-2.5 bg-zinc-800 rounded w-5/6" />
+                          <div className="h-2.5 bg-zinc-800 rounded w-4/5" />
                         </div>
                       </div>
                     )}
                   </div>
-                )}
+                ) : (
+                  <article className="flex flex-col gap-10">
+                    {/* Document Header */}
+                    <div className="text-center pb-8 border-b border-zinc-900">
+                      <h1 className="text-2xl font-calendas text-white leading-snug font-bold max-w-xl mx-auto">
+                        {globalState.proposal.title}
+                      </h1>
+                      <div className="mt-4 flex items-center justify-center gap-4 text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
+                        <span>SESSION: {globalState.session_id.substring(0, 8)}</span>
+                        <span>&bull;</span>
+                        <span>DATE: {new Date(globalState.timestamp).toLocaleDateString()}</span>
+                      </div>
+                    </div>
 
-                {/* 2. LITERATURE TAB */}
-                {activeTab === "literature" && globalState && (
-                  <div className="flex flex-col gap-6 animate-fade-in">
-                    {/* Synthesis Paragraph */}
-                    <div className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-3">
-                      <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-purple-400" />
-                        Literature Synthesis
-                      </h4>
-                      <p className="text-sm text-gray-300 leading-relaxed font-light whitespace-pre-line">
-                        {globalState.literature.synthesis}
+                    {/* Abstract Section */}
+                    <section className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 border-b border-zinc-900 pb-1.5">
+                        <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">Abstract</h3>
+                        <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">SYNTHESIZED</span>
+                      </div>
+                      <p className="text-xs text-zinc-400 italic text-justify leading-relaxed pl-4 border-l border-purple-500/30">
+                        {globalState.proposal.abstract}
                       </p>
-                    </div>
+                    </section>
 
-                    {/* Gaps, Consensus, Contradictions */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-3">
-                        <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                          <AlertCircle className="w-4 h-4 text-orange-400" />
-                          Identified Knowledge Gaps
-                        </span>
-                        <ul className="text-xs text-zinc-400 flex flex-col gap-2 list-disc pl-4">
-                          {globalState.literature.knowledge_gaps.map((g, i) => (
-                            <li key={i} className="leading-relaxed">{g}</li>
-                          ))}
-                        </ul>
+                    {/* Section 1: Intro */}
+                    <section className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 border-b border-zinc-900 pb-1.5">
+                        <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">1. Introduction & Problem Scope</h3>
+                        <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">ORCHESTRATOR</span>
+                      </div>
+                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
+                        {globalState.proposal.sections["1_introduction"].background}
+                      </p>
+                      
+                      <div className="p-3.5 bg-zinc-900/20 border border-zinc-900 rounded-lg text-xs font-light leading-relaxed text-zinc-400 mt-2">
+                        <strong className="text-white text-[10px] block font-mono uppercase tracking-wide mb-1">Problem Statement</strong>
+                        {globalState.proposal.sections["1_introduction"].problem_statement}
                       </div>
 
-                      <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-3">
-                        <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                          <CheckCircle className="w-4 h-4 text-green-400" />
-                          Consensus Findings
-                        </span>
-                        <ul className="text-xs text-zinc-400 flex flex-col gap-2 list-disc pl-4">
-                          {globalState.literature.consensus_findings.map((c, i) => (
-                            <li key={i} className="leading-relaxed">{c}</li>
-                          ))}
-                        </ul>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-light leading-relaxed mt-1">
+                        <div className="p-3 bg-zinc-900/10 border border-zinc-900 rounded-lg">
+                          <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Formal Research Inquiry</strong>
+                          <p className="text-zinc-300 italic mt-1 font-calendas">"{globalState.proposal.sections["1_introduction"].research_question}"</p>
+                        </div>
+                        <div className="p-3 bg-zinc-900/10 border border-zinc-900 rounded-lg">
+                          <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Significance & Utility</strong>
+                          <p className="text-zinc-400 mt-1 leading-normal text-[11px]">{globalState.proposal.sections["1_introduction"].significance}</p>
+                        </div>
                       </div>
-                    </div>
+                    </section>
 
-                    {/* Grounded Papers */}
-                    <div className="flex flex-col gap-3 mt-4">
-                      <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                        <Database className="w-4 h-4 text-purple-400" />
-                        Scored Academic Reference List
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {globalState.literature.papers.map((p, i) => (
-                          <div key={i} className="p-4 rounded-lg border border-zinc-800 bg-zinc-950 flex flex-col gap-2 hover:border-zinc-700 transition-all">
-                            <div className="flex justify-between items-start gap-2">
-                              <span className="text-xs font-bold text-white hover:text-purple-400 cursor-pointer line-clamp-2">
-                                {p.title}
-                              </span>
-                              <span className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded flex-shrink-0 ${
-                                p.relevance_score >= 8 ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
-                              }`}>
-                                S: {p.relevance_score}/10
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-zinc-500">
-                              {p.authors.join(", ")} ({p.year}) — <em>{p.venue}</em>
+                    {/* Section 2: Lit Review */}
+                    <section className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 border-b border-zinc-900 pb-1.5">
+                        <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">2. Literature Synthesis</h3>
+                        <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">LITERATURE AGENT</span>
+                      </div>
+                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
+                        {globalState.proposal.sections["2_literature_review"].content}
+                      </p>
+                    </section>
+
+                    {/* Section 3: Hypotheses */}
+                    <section className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 border-b border-zinc-900 pb-1.5">
+                        <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">3. Experimental Hypotheses</h3>
+                        <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">HYPOTHESIS AGENT</span>
+                      </div>
+                      
+                      <div className="flex flex-col gap-4 mt-2">
+                        {[
+                          globalState.proposal.sections["3_hypotheses"].hypothesis_1,
+                          globalState.proposal.sections["3_hypotheses"].hypothesis_2,
+                          globalState.proposal.sections["3_hypotheses"].hypothesis_3
+                        ].map((h, i) => (
+                          <div key={i} className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-lg flex flex-col gap-2">
+                            <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
+                              <span className="w-1 h-3 bg-purple-500 rounded-full" />
+                              H{i + 1}: {h.title}
                             </span>
-                            <p className="text-xs text-zinc-400 line-clamp-3 italic mt-1">
-                              "{p.abstract_summary}"
+                            <p className="text-xs text-zinc-300 font-calendas italic leading-relaxed pl-3 border-l border-zinc-800">
+                              "{h.statement}"
                             </p>
-                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-zinc-900 text-[10px] text-zinc-500">
-                              <span>Citations: {p.citation_count}</span>
-                              <a
-                                href={p.doi_or_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-purple-400 hover:underline"
-                              >
-                                View Paper URL
-                              </a>
+                            <div className="grid grid-cols-2 gap-3 text-[10px] text-zinc-500 mt-1 font-light leading-normal border-t border-zinc-900/60 pt-2">
+                              <div>
+                                <strong className="text-zinc-400 block text-[9px] uppercase font-mono mb-0.5">H₀ (Null)</strong>
+                                {h.null_hyp}
+                              </div>
+                              <div>
+                                <strong className="text-zinc-400 block text-[9px] uppercase font-mono mb-0.5">H₁ (Alternative)</strong>
+                                {h.alt_hyp}
+                              </div>
                             </div>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  </div>
+                    </section>
+
+                    {/* Section 4: Methodology */}
+                    <section className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2 border-b border-zinc-900 pb-1.5">
+                        <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">4. Experimental Protocols</h3>
+                        <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">METHODOLOGY AGENT</span>
+                      </div>
+                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
+                        {globalState.proposal.sections["4_methodology"].overview}
+                      </p>
+                      
+                      <div className="mt-2 p-4 bg-zinc-900/30 border border-zinc-900 rounded-lg flex flex-col gap-3.5">
+                        <span className="font-bold text-purple-400 text-xs font-mono uppercase tracking-wide">
+                          Prioritized Protocol (E1): {globalState.proposal.sections["4_methodology"].primary_experiment?.study_design}
+                        </span>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-light text-zinc-400 leading-relaxed">
+                          <div>
+                            <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Sample Size & Power Analysis</strong>
+                            {globalState.proposal.sections["4_methodology"].primary_experiment?.participants_or_subjects?.sample_size}
+                          </div>
+                          <div>
+                            <strong className="text-zinc-500 block text-[9px] uppercase font-mono">Blinding Standard</strong>
+                            {globalState.proposal.sections["4_methodology"].primary_experiment?.procedure?.blinding}
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Section 5: Ethics */}
+                    <section className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2 border-b border-zinc-900 pb-1.5">
+                        <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">5. Ethical Disclosures</h3>
+                        <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">CRITIQUE AGENT</span>
+                      </div>
+                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
+                        {globalState.proposal.sections["5_ethical_considerations"]}
+                      </p>
+                    </section>
+
+                    {/* Section 6: Timeline & Budget */}
+                    <section className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2 border-b border-zinc-900 pb-1.5">
+                        <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">6. Resource Projection</h3>
+                        <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[8px] font-mono rounded">SYNTHESIZER</span>
+                      </div>
+                      <p className="text-xs text-zinc-400 text-justify font-light leading-relaxed">
+                        {globalState.proposal.sections["6_timeline_and_budget"]}
+                      </p>
+                    </section>
+
+                    {/* Section 10: References */}
+                    <section className="flex flex-col gap-3 border-t border-zinc-900 pt-6 mt-4">
+                      <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-white">References</h3>
+                      <ul className="text-[10px] text-zinc-500 font-mono flex flex-col gap-2 list-none pl-0 leading-relaxed">
+                        {globalState.proposal.sections["10_references"].map((ref, idx) => (
+                          <li key={idx} className="pl-6 -indent-6 text-justify">
+                            {ref}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  </article>
                 )}
+              </div>
+            </section>
 
-                {/* 3. HYPOTHESES TAB */}
-                {activeTab === "hypotheses" && globalState && (
-                  <div className="flex flex-col gap-6 animate-fade-in">
-                    {/* Selectors */}
-                    <div className="flex gap-2">
-                      {globalState.hypotheses.map((h, i) => (
-                        <button
-                          key={h.hypothesis_id}
-                          onClick={() => setSelectedHypothesisIndex(i)}
-                          className={`flex-1 p-3 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                            selectedHypothesisIndex === i
-                              ? "bg-purple-500/10 border-purple-500 text-purple-300"
-                              : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
-                          }`}
-                        >
-                          {h.hypothesis_id} ({h.strategy.toUpperCase()})
-                        </button>
-                      ))}
-                    </div>
+            {/* COLUMN 3: AGENT PEER REVIEW & RETRIEVAL DETAILS (3 Columns) */}
+            <aside className="lg:col-span-3 flex flex-col gap-5 h-full">
+              {/* Context Selector Tabs */}
+              <div className="p-1.5 bg-zinc-950 border border-zinc-900 rounded-xl flex gap-1">
+                {[
+                  { id: "papers", label: "Papers", icon: Database },
+                  { id: "protocols", label: "Protocols", icon: FlaskConical },
+                  { id: "critiques", label: "Critique", icon: ShieldAlert }
+                ].map((t) => {
+                  const Icon = t.icon;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setActiveInspectorTab(t.id as any)}
+                      disabled={!globalState}
+                      className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer ${
+                        activeInspectorTab === t.id
+                          ? "bg-zinc-900 text-white border border-zinc-800"
+                          : "text-zinc-500 hover:text-zinc-300 border border-transparent"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{t.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-                    {/* Selected Hypothesis Card */}
-                    {(() => {
-                      const h: HypothesisObject = globalState.hypotheses[selectedHypothesisIndex];
-                      if (!h) return null;
-                      return (
-                        <div className="flex flex-col gap-6">
-                          <div className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-4">
-                            <div>
-                              <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">Title</span>
-                              <h3 className="text-lg font-bold text-white mt-0.5">{h.title}</h3>
+              {/* Inspector Content Sheet */}
+              <div className="flex-1 p-5 bg-zinc-950 border border-zinc-900 rounded-xl flex flex-col gap-4 overflow-y-auto max-h-[80vh] scrollbar-thin">
+                {!globalState ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                    <HelpCircle className="w-8 h-8 text-zinc-800 mb-2 animate-pulse" />
+                    <span className="text-[10px] text-zinc-500 uppercase font-mono tracking-wider">Inspector Locked</span>
+                    <p className="text-[10px] text-zinc-600 mt-1 font-light leading-normal">
+                      Run the pipeline to activate metadata tabs.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex-col flex gap-4 h-full">
+                    
+                    {/* PAPERS INSPECTOR */}
+                    {activeInspectorTab === "papers" && (
+                      <div className="flex flex-col gap-4">
+                        <span className="text-[9px] text-zinc-500 font-mono uppercase tracking-wider block border-b border-zinc-900 pb-1.5">
+                          Semantic Scholar Index
+                        </span>
+                        
+                        <div className="flex flex-col gap-3">
+                          {globalState.literature.papers.map((p) => (
+                            <div key={p.paper_id} className="p-3 bg-zinc-900/20 border border-zinc-900 rounded-lg flex flex-col gap-1.5 hover:border-zinc-800 transition-all text-[11px] leading-relaxed">
+                              <div className="flex justify-between items-start gap-2">
+                                <span className="font-semibold text-white truncate w-40">{p.title}</span>
+                                <span className={`px-1.5 py-0.5 rounded font-mono font-bold text-[8px] ${
+                                  p.relevance_score >= 8 ? "bg-green-500/25 text-green-400" : "bg-yellow-500/25 text-yellow-400"
+                                }`}>
+                                  R:{p.relevance_score}
+                                </span>
+                              </div>
+                              <span className="text-[9px] text-zinc-500">{p.authors[0]} ({p.year}) &bull; {p.venue}</span>
+                              <p className="text-[10px] text-zinc-400 italic line-clamp-2 mt-0.5">"{p.abstract_summary}"</p>
+                              <div className="flex justify-between items-center pt-1.5 border-t border-zinc-900/60 mt-1 text-[9px] text-zinc-500 font-mono">
+                                <span>Citations: {p.citation_count}</span>
+                                <a href={p.doi_or_url} target="_blank" rel="noreferrer" className="text-purple-400 hover:underline">
+                                  SOURCE &rarr;
+                                </a>
+                              </div>
                             </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                            <div className="p-4 bg-zinc-950 border border-zinc-900 rounded-lg flex flex-col gap-2">
-                              <span className="text-[10px] text-purple-400 uppercase tracking-wider font-mono">Formal If-Then-Because</span>
-                              <p className="text-sm font-calendas text-white leading-relaxed italic">
-                                "{h.statement.if_then_because}"
-                              </p>
-                            </div>
+                    {/* PROTOCOLS INSPECTOR */}
+                    {activeInspectorTab === "protocols" && (
+                      <div className="flex flex-col gap-4">
+                        <div className="flex gap-1.5 border-b border-zinc-900 pb-2">
+                          {globalState.experiments.map((e, idx) => (
+                            <button
+                              key={e.experiment_id}
+                              onClick={() => setSelectedExpIndex(idx)}
+                              className={`flex-1 py-1 rounded text-[9px] font-mono font-bold border transition-all cursor-pointer ${
+                                selectedExpIndex === idx
+                                  ? "bg-purple-500/10 border-purple-500 text-purple-300"
+                                  : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700"
+                              }`}
+                            >
+                              {e.experiment_id}
+                            </button>
+                          ))}
+                        </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                              <div className="p-3 bg-zinc-900/40 rounded-lg border border-zinc-900 flex flex-col gap-1">
-                                <span className="text-zinc-500 font-mono text-[9px] uppercase">Null Hypothesis (H₀)</span>
-                                <span className="text-zinc-300 font-light">{h.statement.H0}</span>
+                        {(() => {
+                          const e = globalState.experiments[selectedExpIndex];
+                          const h = globalState.hypotheses[selectedExpIndex];
+                          if (!e || !h) return null;
+                          return (
+                            <div className="flex flex-col gap-4 text-[11px] leading-relaxed">
+                              <div>
+                                <span className="text-[9px] text-zinc-500 font-mono uppercase">Design Strategy</span>
+                                <span className="text-white block font-medium mt-0.5">{e.study_design}</span>
+                                <span className="text-[10px] text-zinc-400 font-light block leading-normal mt-1 bg-zinc-900/30 p-2 border border-zinc-900 rounded">
+                                  {e.design_justification}
+                                </span>
                               </div>
-                              <div className="p-3 bg-zinc-900/40 rounded-lg border border-zinc-900 flex flex-col gap-1">
-                                <span className="text-zinc-500 font-mono text-[9px] uppercase">Alternative Hypothesis (H₁)</span>
-                                <span className="text-zinc-300 font-light">{h.statement.H1}</span>
-                              </div>
-                            </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs border-t border-zinc-900 pt-4 mt-2">
-                              <div>
-                                <span className="text-[10px] text-zinc-500 block mb-1">Independent Variable</span>
-                                <span className="text-white font-medium">{h.variables.independent}</span>
+                              <div className="border-t border-zinc-900 pt-3">
+                                <span className="text-[9px] text-zinc-500 font-mono uppercase">Power analysis</span>
+                                <span className="text-white block font-medium mt-0.5 capitalize">{e.participants_or_subjects.type} (N={e.participants_or_subjects.sample_size})</span>
+                                <span className="text-[10px] text-zinc-400 font-mono block leading-normal mt-1 bg-zinc-900/30 p-2 border border-zinc-900 rounded">
+                                  {e.participants_or_subjects.power_analysis}
+                                </span>
                               </div>
-                              <div>
-                                <span className="text-[10px] text-zinc-500 block mb-1">Dependent Variable</span>
-                                <span className="text-white font-medium">{h.variables.dependent}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] text-zinc-500 block mb-1">Control Variables</span>
-                                <div className="flex flex-wrap gap-1 mt-0.5">
-                                  {h.variables.controls.map((ctrl, i) => (
-                                    <span key={i} className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400">
-                                      {ctrl}
-                                    </span>
+
+                              <div className="border-t border-zinc-900 pt-3">
+                                <span className="text-[9px] text-zinc-500 font-mono uppercase">Material Checklist</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {e.materials_and_tools.equipment.slice(0, 3).map((item, idx) => (
+                                    <span key={idx} className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 text-[9px] border border-zinc-800">{item}</span>
                                   ))}
                                 </div>
                               </div>
-                            </div>
-                          </div>
 
-                          {/* Evidence Mapping & Falsification */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-3 text-xs">
-                              <span className="font-bold text-white flex items-center gap-1.5">
-                                <Activity className="w-4 h-4 text-purple-400" />
-                                Predicted Outcomes & Falsification
-                              </span>
-                              <div className="flex flex-col gap-2">
-                                <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-lg">
-                                  <strong className="text-zinc-400 block mb-1 text-[10px]">PREDICTED MEASUREMENT:</strong>
-                                  <p className="text-zinc-300">{h.predicted_outcome}</p>
-                                </div>
-                                <div className="p-3 bg-red-950/15 border border-red-500/10 rounded-lg">
-                                  <strong className="text-red-400 block mb-1 text-[10px]">FALSIFICATION CRITERION:</strong>
-                                  <p className="text-red-300 font-mono text-[11px]">{h.falsification_criterion}</p>
+                              <div className="border-t border-zinc-900 pt-3">
+                                <span className="text-[9px] text-zinc-500 font-mono uppercase">Timeline & Budget</span>
+                                <div className="grid grid-cols-2 gap-2 mt-1.5">
+                                  <div className="p-2 bg-zinc-900/20 border border-zinc-900 rounded">
+                                    <span className="text-[8px] text-zinc-500 font-mono block uppercase">Total Cost</span>
+                                    <span className="text-purple-300 font-bold text-xs">{e.budget_estimate.total_estimated}</span>
+                                  </div>
+                                  <div className="p-2 bg-zinc-900/20 border border-zinc-900 rounded">
+                                    <span className="text-[8px] text-zinc-500 font-mono block uppercase">Timeline</span>
+                                    <span className="text-white font-bold text-xs">{e.timeline.total_duration}</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
+                          );
+                        })()}
+                      </div>
+                    )}
 
-                            <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-3 text-xs">
-                              <span className="font-bold text-white flex items-center gap-1.5">
-                                <Database className="w-4 h-4 text-purple-400" />
-                                Literature Evidence Map
-                              </span>
-                              <div className="flex flex-col gap-3">
-                                <div>
-                                  <strong className="text-zinc-500 block text-[9px] uppercase">Supporting Papers</strong>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {h.evidence_map.supporting_papers.map((pId) => (
-                                      <span key={pId} className="px-2 py-0.5 rounded bg-purple-950/20 text-purple-300 border border-purple-500/20 text-[10px]">
-                                        {pId}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  <p className="text-zinc-400 mt-1.5 leading-relaxed font-light">{h.evidence_map.supporting_reasoning}</p>
-                                </div>
-                                
-                                {h.evidence_map.contradicting_papers.length > 0 && (
-                                  <div className="border-t border-zinc-900 pt-2">
-                                    <strong className="text-zinc-500 block text-[9px] uppercase">Challenging Papers</strong>
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {h.evidence_map.contradicting_papers.map((pId) => (
-                                        <span key={pId} className="px-2 py-0.5 rounded bg-red-950/20 text-red-300 border border-red-500/20 text-[10px]">
-                                          {pId}
-                                        </span>
-                                      ))}
-                                    </div>
-                                    <p className="text-zinc-400 mt-1.5 leading-relaxed font-light">{h.evidence_map.contradicting_reasoning}</p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                    {/* CRITIQUES INSPECTOR */}
+                    {activeInspectorTab === "critiques" && (
+                      <div className="flex flex-col gap-4">
+                        <div className="flex gap-1.5 border-b border-zinc-900 pb-2">
+                          {globalState.critique.per_hypothesis.map((crit, idx) => (
+                            <button
+                              key={crit.hypothesis_id}
+                              onClick={() => setSelectedHypIndex(idx)}
+                              className={`flex-1 py-1 rounded text-[9px] font-mono font-bold border transition-all cursor-pointer ${
+                                selectedHypIndex === idx
+                                  ? "bg-purple-500/10 border-purple-500 text-purple-300"
+                                  : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700"
+                              }`}
+                            >
+                              {crit.hypothesis_id}
+                            </button>
+                          ))}
                         </div>
-                      );
-                    })()}
-                  </div>
-                )}
 
-                {/* 4. EXPERIMENTS TAB */}
-                {activeTab === "experiments" && globalState && (
-                  <div className="flex flex-col gap-6 animate-fade-in">
-                    {/* Selectors */}
-                    <div className="flex gap-2">
-                      {globalState.experiments.map((e, i) => (
-                        <button
-                          key={e.experiment_id}
-                          onClick={() => setSelectedExperimentIndex(i)}
-                          className={`flex-1 p-3 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                            selectedExperimentIndex === i
-                              ? "bg-purple-500/10 border-purple-500 text-purple-300"
-                              : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
-                          }`}
-                        >
-                          {e.experiment_id} ({globalState.hypotheses[i]?.strategy.toUpperCase()})
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Selected Experiment Card */}
-                    {(() => {
-                      const e: ExperimentObject = globalState.experiments[selectedExperimentIndex];
-                      if (!e) return null;
-                      return (
-                        <div className="flex flex-col gap-6">
-                          <div className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-4">
-                            <div className="flex justify-between items-start gap-4">
-                              <div>
-                                <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">Study Design Type</span>
-                                <h3 className="text-lg font-bold text-white mt-0.5">{e.study_design}</h3>
-                              </div>
-                              <div className="px-3 py-1 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-400">
-                                Target Hypothesis: {e.hypothesis_id}
-                              </div>
-                            </div>
-
-                            <p className="text-xs text-zinc-400 leading-relaxed font-light bg-zinc-950 p-3 rounded-lg border border-zinc-900">
-                              <strong>Design Justification:</strong> {e.design_justification}
-                            </p>
-
-                            {/* Section 1: Subjects & Sampling */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-zinc-900 pt-4 text-xs">
-                              <div className="flex flex-col gap-2">
-                                <span className="font-bold text-white uppercase text-[10px] tracking-wider font-mono text-purple-400">Subjects & Power analysis</span>
-                                <div>
-                                  <span className="text-zinc-500 block">Subject Archetype:</span>
-                                  <span className="text-white capitalize">{e.participants_or_subjects.type}</span>
-                                </div>
-                                <div>
-                                  <span className="text-zinc-500 block">Sample Size (N):</span>
-                                  <span className="text-white">{e.participants_or_subjects.sample_size}</span>
-                                </div>
-                                <div className="p-2 bg-zinc-950 rounded border border-zinc-900 mt-1">
-                                  <span className="text-[9px] text-zinc-500 block">Statistical Power Rationale:</span>
-                                  <span className="text-zinc-400 text-[11px] font-mono leading-normal">{e.participants_or_subjects.power_analysis}</span>
-                                </div>
-                              </div>
-
-                              <div className="flex flex-col gap-2">
-                                <span className="font-bold text-white uppercase text-[10px] tracking-wider font-mono text-purple-400">Materials, Tools & Software</span>
-                                <div className="flex flex-col gap-1.5">
-                                  <div>
-                                    <span className="text-zinc-500 block">Primary Equipment:</span>
-                                    <div className="flex flex-wrap gap-1 mt-0.5">
-                                      {e.materials_and_tools.equipment.map((eq, i) => (
-                                        <span key={i} className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 text-[10px]">{eq}</span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <span className="text-zinc-500 block">Software Pipeline:</span>
-                                    <div className="flex flex-wrap gap-1 mt-0.5">
-                                      {e.materials_and_tools.software.map((sw, i) => (
-                                        <span key={i} className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 text-[10px]">{sw}</span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Procedure Phases */}
-                          <div className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-4">
-                            <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-purple-400" />
-                              Protocol Procedure Steps
-                            </h4>
-
-                            <div className="flex flex-col gap-3">
-                              {e.procedure.phases.map((ph, idx) => (
-                                <div key={idx} className="p-4 bg-zinc-950 border border-zinc-900 rounded-lg flex flex-col gap-2 text-xs">
-                                  <div className="flex justify-between items-center border-b border-zinc-900 pb-1.5">
-                                    <span className="font-bold text-purple-300 text-[11px] uppercase tracking-wide">
-                                      Phase {idx + 1}: {ph.phase_name}
-                                    </span>
-                                    <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 rounded font-mono text-[10px]">
-                                      {ph.duration}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="flex flex-col gap-1.5 mt-1">
-                                    <span className="text-zinc-500 text-[9px] uppercase font-mono">Execution Steps:</span>
-                                    <ul className="list-decimal pl-4 flex flex-col gap-1 text-zinc-400 leading-relaxed font-light">
-                                      {ph.steps.map((st, i) => (
-                                        <li key={i}>{st}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs border-t border-zinc-900 pt-4 mt-2">
-                              <div>
-                                <span className="text-[10px] text-zinc-500 block mb-1">Blinding Protocol</span>
-                                <span className="px-2 py-0.5 rounded bg-zinc-900 text-white font-medium capitalize">{e.procedure.blinding}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] text-zinc-500 block mb-1">Control Group Standard</span>
-                                <span className="text-zinc-400 leading-normal block">{e.procedure.control_group_description}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] text-zinc-500 block mb-1">Statistical Analysis Test</span>
-                                <span className="text-white font-semibold font-mono">{e.statistical_analysis.primary_test} ({e.statistical_analysis.software})</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Budget & Timeline & Confounds */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-3 text-xs">
-                              <span className="font-bold text-white flex items-center gap-1.5">
-                                <DollarSign className="w-4 h-4 text-purple-400" />
-                                Budget & Duration Estimates
+                        {(() => {
+                          const crit = globalState.critique.per_hypothesis[selectedHypIndex];
+                          if (!crit) return null;
+                          return (
+                            <div className="flex flex-col gap-4">
+                              <span className="text-[9px] text-zinc-500 font-mono uppercase tracking-wider block">
+                                Peer Evaluation Dials
                               </span>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-lg flex flex-col">
-                                  <span className="text-[9px] text-zinc-500 font-mono uppercase">Personnel</span>
-                                  <span className="text-white font-semibold mt-1">{e.budget_estimate.personnel}</span>
-                                </div>
-                                <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-lg flex flex-col">
-                                  <span className="text-[9px] text-zinc-500 font-mono uppercase">Consumables</span>
-                                  <span className="text-white font-semibold mt-1">{e.budget_estimate.consumables}</span>
-                                </div>
-                                <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-lg flex flex-col col-span-2">
-                                  <span className="text-[9px] text-zinc-500 font-mono uppercase">Total Projected Budget</span>
-                                  <span className="text-purple-300 font-bold mt-1 text-sm">{e.budget_estimate.total_estimated}</span>
-                                </div>
+                              
+                              <div className="flex flex-col gap-2.5">
+                                {renderRadialScore(crit.novelty_assessment.score, 10, "Novelty Rating")}
+                                {renderRadialScore(crit.feasibility_assessment.score, 10, "Feasibility Rating")}
+                                {renderRadialScore(crit.scientific_rigor_assessment.score, 10, "Scientific Rigor")}
                               </div>
-                            </div>
 
-                            <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/20 flex flex-col gap-3 text-xs">
-                              <span className="font-bold text-white flex items-center gap-1.5">
-                                <ShieldAlert className="w-4 h-4 text-purple-400" />
-                                Confounds & Mitigation Strategy
-                              </span>
-                              <div className="flex flex-col gap-2">
-                                {e.potential_confounds.map((conf, idx) => (
-                                  <div key={idx} className="p-3 bg-zinc-950 border border-zinc-900 rounded-lg">
-                                    <div className="flex gap-2 items-start">
-                                      <span className="px-1.5 py-0.5 rounded bg-orange-950/20 text-orange-400 border border-orange-500/20 text-[9px] font-mono uppercase mt-0.5">
-                                        Confound
-                                      </span>
-                                      <span className="text-white font-medium">{conf}</span>
-                                    </div>
-                                    <div className="text-zinc-400 text-[11px] leading-relaxed font-light mt-1.5 pl-2 border-l border-purple-500/30">
-                                      <strong>Mitigation:</strong> {e.mitigation_strategies[idx] || "Standard laboratory normalization."}
-                                    </div>
-                                  </div>
-                                ))}
+                              <div className="border-t border-zinc-900 pt-3 text-[11px] leading-relaxed">
+                                <span className="text-[9px] text-zinc-500 font-mono uppercase">Rigor Verdict</span>
+                                <p className="text-zinc-300 font-light mt-0.5">{crit.summary_for_researcher}</p>
                               </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
 
-                {/* 5. CRITIQUE TAB */}
-                {activeTab === "critique" && globalState && (
-                  <div className="flex flex-col gap-6 animate-fade-in">
-                    <div className="p-6 bg-zinc-900/20 border border-zinc-800 rounded-xl flex flex-col gap-3">
-                      <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                        <ShieldAlert className="w-4 h-4 text-purple-400" />
-                        Critique Agent Review
-                      </h3>
-                      <p className="text-xs text-zinc-400 leading-relaxed font-light">
-                        Each hypothesis-experiment pair has been thoroughly analyzed by our peer-review and ethics agent across novelty, feasibility, and technical rigor.
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col gap-6">
-                      {globalState.critique.per_hypothesis.map((crit, idx) => (
-                        <div key={idx} className="p-6 rounded-xl border border-zinc-800 bg-zinc-950 flex flex-col gap-4">
-                          <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
-                            <div className="flex items-center gap-3">
-                              <span className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center border border-purple-500/20 font-bold text-purple-400 font-mono text-sm">
-                                {crit.hypothesis_id}
-                              </span>
-                              <div>
-                                <h4 className="text-sm font-bold text-white">
-                                  {globalState.hypotheses[idx]?.title || "Hypothesis Pair Evaluation"}
-                                </h4>
-                                <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">
-                                  Experiment Reference: {crit.experiment_id}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-sm font-bold font-mono text-purple-300">
-                                Score: {crit.overall_score}/10
-                              </div>
-                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono">
-                                Priority Rank: #{crit.priority_ranking}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                            {/* Novelty */}
-                            <div className="p-4 rounded-lg bg-zinc-900/40 border border-zinc-900 flex flex-col gap-2">
-                              <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-white uppercase tracking-wider font-mono">Novelty</span>
-                                <span className="font-mono text-purple-400 font-semibold">{crit.novelty_assessment.score}/10</span>
-                              </div>
-                              <span className="text-zinc-500 text-[10px] capitalize">Verdict: {crit.novelty_assessment.verdict}</span>
-                              <p className="text-zinc-400 leading-relaxed font-light text-[11px]">
-                                {crit.novelty_assessment.rationale}
-                              </p>
-                              {crit.novelty_assessment.prior_art_concerns && (
-                                <p className="text-[10px] text-orange-400 border-t border-zinc-900 pt-1.5 mt-1">
-                                  <strong>Prior Art:</strong> {crit.novelty_assessment.prior_art_concerns}
-                                </p>
-                              )}
-                            </div>
-
-                            {/* Feasibility */}
-                            <div className="p-4 rounded-lg bg-zinc-900/40 border border-zinc-900 flex flex-col gap-2">
-                              <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-white uppercase tracking-wider font-mono">Feasibility</span>
-                                <span className="font-mono text-purple-400 font-semibold">{crit.feasibility_assessment.score}/10</span>
-                              </div>
-                              <span className="text-zinc-500 text-[10px] capitalize">Resource Load: {crit.feasibility_assessment.resource_requirements}</span>
-                              <p className="text-zinc-400 leading-relaxed font-light text-[11px]">
-                                {crit.feasibility_assessment.rationale}
-                              </p>
-                              <div className="flex flex-wrap gap-1 mt-1 text-[9px]">
-                                {crit.feasibility_assessment.technical_barriers.map((b, i) => (
-                                  <span key={i} className="px-1.5 py-0.5 rounded bg-zinc-950 text-red-400 border border-red-500/10">
-                                    {b}
+                              <div className="border-t border-zinc-900 pt-3 text-[11px] leading-relaxed">
+                                <span className="text-[9px] text-zinc-500 font-mono uppercase">Ethical Safety Check</span>
+                                <div className="flex flex-wrap gap-2 text-[9px] font-mono text-zinc-400 mt-1">
+                                  <span className={crit.ethical_assessment.irb_required ? "text-red-400" : "text-green-400"}>
+                                    IRB: {crit.ethical_assessment.irb_required ? "REQUIRED" : "EXEMPT"}
                                   </span>
-                                ))}
+                                  <span className={crit.ethical_assessment.animal_welfare_issues ? "text-yellow-400" : "text-green-400"}>
+                                    ANIMAL: {crit.ethical_assessment.animal_welfare_issues ? "YES" : "NO"}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-
-                            {/* Rigor */}
-                            <div className="p-4 rounded-lg bg-zinc-900/40 border border-zinc-900 flex flex-col gap-2">
-                              <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-white uppercase tracking-wider font-mono">Scientific Rigor</span>
-                                <span className="font-mono text-purple-400 font-semibold">{crit.scientific_rigor_assessment.score}/10</span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                                <div className="flex justify-between border-b border-zinc-900 pb-0.5">
-                                  <span className="text-zinc-500">Internal Validity:</span>
-                                  <span className="text-white font-medium uppercase">{crit.scientific_rigor_assessment.internal_validity}</span>
-                                </div>
-                                <div className="flex justify-between border-b border-zinc-900 pb-0.5">
-                                  <span className="text-zinc-500">External Validity:</span>
-                                  <span className="text-white font-medium uppercase">{crit.scientific_rigor_assessment.external_validity}</span>
-                                </div>
-                                <div className="flex justify-between border-b border-zinc-900 pb-0.5">
-                                  <span className="text-zinc-500">Power:</span>
-                                  <span className="text-white font-medium uppercase">{crit.scientific_rigor_assessment.statistical_power}</span>
-                                </div>
-                                <div className="flex justify-between border-b border-zinc-900 pb-0.5">
-                                  <span className="text-zinc-500">Confound Control:</span>
-                                  <span className="text-white font-medium uppercase text-[9px]">{crit.scientific_rigor_assessment.confound_control}</span>
-                                </div>
-                              </div>
-                              <p className="text-zinc-400 leading-relaxed font-light text-[11px] mt-1">
-                                <strong>Rigor Recommendation:</strong> {crit.scientific_rigor_assessment.recommendation}
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Ethical concerns list */}
-                          <div className="p-4 bg-zinc-900/10 border border-zinc-900 rounded-lg text-xs flex flex-col gap-2">
-                            <span className="font-bold text-white flex items-center gap-1">
-                              <ShieldAlert className="w-4 h-4 text-orange-400" />
-                              Ethical & IRB Safeguards
-                            </span>
-                            <div className="flex flex-wrap gap-4 text-[10px] text-zinc-400 mb-1">
-                              <span>IRB Approval Required: <strong className="text-white">{crit.ethical_assessment.irb_required ? "Yes" : "No"}</strong></span>
-                              <span>Animal Welfare: <strong className="text-white">{crit.ethical_assessment.animal_welfare_issues ? "Yes" : "No"}</strong></span>
-                              <span>Data Privacy: <strong className="text-white">{crit.ethical_assessment.data_privacy_issues ? "Yes" : "No"}</strong></span>
-                              <span>Dual Use Risk: <strong className="text-white">{crit.ethical_assessment.dual_use_risk ? "Yes" : "No"}</strong></span>
-                            </div>
-                            
-                            {crit.ethical_assessment.concerns_identified && (
-                              <div className="flex flex-col gap-1.5 border-t border-zinc-900 pt-2 mt-1">
-                                {crit.ethical_assessment.concern_list.map((c, i) => (
-                                  <div key={i} className="p-2 bg-red-950/10 border border-red-500/10 rounded flex justify-between gap-4">
-                                    <div className="flex flex-col">
-                                      <span className="text-red-300 font-medium">Issue: {c.concern}</span>
-                                      <span className="text-zinc-400 text-[10px] mt-0.5">Mitigation: {c.mitigation}</span>
-                                    </div>
-                                    <span className="px-2 py-0.5 rounded bg-red-950 text-red-400 text-[9px] font-mono uppercase h-fit">
-                                      {c.severity} Severity
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
-
-                {/* 6. FULL PROPOSAL TAB */}
-                {activeTab === "proposal" && globalState && (
-                  <div className="flex flex-col gap-6 animate-fade-in">
-                    {/* Exporter control panel */}
-                    <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex justify-between items-center">
-                      <div className="flex flex-col gap-1">
-                        <h4 className="text-sm font-bold text-white font-overusedGrotesk">Compile & Export Proposal</h4>
-                        <span className="text-[10px] text-zinc-500">Document generated in complete academic format.</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => copyToClipboard(JSON.stringify(globalState.proposal, null, 2))}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-xs font-semibold hover:text-white transition-colors cursor-pointer"
-                        >
-                          {copied ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 text-green-400" />
-                              <span className="text-green-400">Copied!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5" />
-                              <span>Copy JSON</span>
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={downloadMarkdown}
-                          className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white transition-colors cursor-pointer"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Export Markdown</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Academic Manuscript View */}
-                    <div className="p-8 md:p-12 bg-zinc-950 border border-zinc-900 rounded-xl flex flex-col gap-8 shadow-inner select-text">
-                      {/* Document Header */}
-                      <div className="text-center flex flex-col gap-4 border-b border-zinc-900 pb-8">
-                        <h1 className="text-2xl md:text-3xl font-calendas text-white leading-snug font-bold max-w-3xl mx-auto">
-                          {globalState.proposal.title}
-                        </h1>
-                        <span className="text-xs text-zinc-500 uppercase tracking-widest font-mono mt-1">
-                          PROPOSAL IDENTIFIER: {globalState.session_id.substring(0, 8).toUpperCase()} // DATE: {new Date(globalState.timestamp).toLocaleDateString()}
-                        </span>
-                      </div>
-
-                      {/* Abstract */}
-                      <div className="flex flex-col gap-2">
-                        <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          Abstract
-                        </h4>
-                        <p className="text-xs text-gray-300 leading-relaxed font-light text-justify italic pl-4 border-l-2 border-purple-500/30">
-                          {globalState.proposal.abstract}
-                        </p>
-                      </div>
-
-                      {/* Section 1: Introduction */}
-                      <div className="flex flex-col gap-3">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          1. Introduction & Background
-                        </h4>
-                        <p className="text-xs text-gray-300 leading-relaxed font-light text-justify">
-                          {globalState.proposal.sections["1_introduction"].background}
-                        </p>
-                        <div className="p-3 bg-zinc-900/30 rounded border border-zinc-900 mt-2">
-                          <strong className="text-purple-400 text-[10px] block font-mono uppercase">Problem Statement:</strong>
-                          <p className="text-xs text-gray-300 mt-1 font-light leading-relaxed">
-                            {globalState.proposal.sections["1_introduction"].problem_statement}
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                          <div>
-                            <strong className="text-zinc-500 text-[9px] uppercase font-mono">Formal Research Inquiry:</strong>
-                            <p className="text-xs text-white italic mt-1 font-light">
-                              {globalState.proposal.sections["1_introduction"].research_question}
-                            </p>
-                          </div>
-                          <div>
-                            <strong className="text-zinc-500 text-[9px] uppercase font-mono">Significance & Scientific Impact:</strong>
-                            <p className="text-xs text-zinc-400 mt-1 font-light leading-relaxed">
-                              {globalState.proposal.sections["1_introduction"].significance}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Section 2: Literature Review */}
-                      <div className="flex flex-col gap-3">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          2. Literature Review & Citation Index
-                        </h4>
-                        <p className="text-xs text-gray-300 leading-relaxed font-light text-justify">
-                          {globalState.proposal.sections["2_literature_review"].content}
-                        </p>
-                        <div className="flex flex-col gap-1 mt-2">
-                          <strong className="text-zinc-500 text-[9px] uppercase font-mono">Primary Citations:</strong>
-                          <div className="flex flex-wrap gap-1.5 mt-1">
-                            {globalState.proposal.sections["2_literature_review"].citations.map((c, i) => (
-                              <span key={i} className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 text-[10px] border border-zinc-800">
-                                {c}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Section 3: Hypotheses */}
-                      <div className="flex flex-col gap-3">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          3. Testable Hypotheses
-                        </h4>
-                        <div className="flex flex-col gap-4 mt-2">
-                          {[
-                            globalState.proposal.sections["3_hypotheses"].hypothesis_1,
-                            globalState.proposal.sections["3_hypotheses"].hypothesis_2,
-                            globalState.proposal.sections["3_hypotheses"].hypothesis_3
-                          ].map((h, i) => (
-                            <div key={i} className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-lg flex flex-col gap-2">
-                              <span className="font-bold text-white text-xs">
-                                Hypothesis {i + 1}: {h.title}
-                              </span>
-                              <p className="text-xs text-gray-300 leading-relaxed font-light italic pl-3 border-l border-purple-500/25">
-                                "{h.statement}"
-                              </p>
-                              <div className="grid grid-cols-2 gap-3 text-[10px] text-zinc-400 mt-1">
-                                <div>
-                                  <strong className="text-zinc-500 block text-[9px] uppercase font-mono">H₀:</strong> {h.null_hyp}
-                                </div>
-                                <div>
-                                  <strong className="text-zinc-500 block text-[9px] uppercase font-mono">H₁:</strong> {h.alt_hyp}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Section 4: Methodology */}
-                      <div className="flex flex-col gap-3">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          4. Experimental Methodology
-                        </h4>
-                        <p className="text-xs text-gray-300 leading-relaxed font-light text-justify">
-                          {globalState.proposal.sections["4_methodology"].overview}
-                        </p>
-                        
-                        <div className="mt-3 p-4 bg-zinc-900/30 border border-zinc-900 rounded-lg flex flex-col gap-3">
-                          <span className="font-bold text-purple-400 text-xs">
-                            Prioritized Protocol (E1): {globalState.proposal.sections["4_methodology"].primary_experiment?.study_design}
-                          </span>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-light text-zinc-400">
-                            <div>
-                              <strong>Sample Size Rationale:</strong> {globalState.proposal.sections["4_methodology"].primary_experiment?.participants_or_subjects?.sample_size}
-                            </div>
-                            <div>
-                              <strong>Blinding protocol:</strong> {globalState.proposal.sections["4_methodology"].primary_experiment?.procedure?.blinding}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Section 5: Ethical considerations */}
-                      <div className="flex flex-col gap-2">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          5. Ethical Considerations & Dual Use Risks
-                        </h4>
-                        <p className="text-xs text-gray-400 leading-relaxed font-light text-justify">
-                          {globalState.proposal.sections["5_ethical_considerations"]}
-                        </p>
-                      </div>
-
-                      {/* Section 6: Budget & Timeline */}
-                      <div className="flex flex-col gap-2">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          6. Timeline and Budget Outline
-                        </h4>
-                        <p className="text-xs text-gray-400 leading-relaxed font-light text-justify">
-                          {globalState.proposal.sections["6_timeline_and_budget"]}
-                        </p>
-                      </div>
-
-                      {/* Section 7: Expected Outcomes */}
-                      <div className="flex flex-col gap-2">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          7. Expected Outcomes & Implications
-                        </h4>
-                        <p className="text-xs text-gray-400 leading-relaxed font-light text-justify">
-                          {globalState.proposal.sections["7_expected_outcomes"]}
-                        </p>
-                      </div>
-
-                      {/* Section 8: Limitations */}
-                      <div className="flex flex-col gap-2">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          8. Research Limitations
-                        </h4>
-                        <p className="text-xs text-gray-400 leading-relaxed font-light text-justify">
-                          {globalState.proposal.sections["8_limitations"]}
-                        </p>
-                      </div>
-
-                      {/* Section 9: Future Directions */}
-                      <div className="flex flex-col gap-2">
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono border-b border-zinc-900 pb-1">
-                          9. Future Research Horizons
-                        </h4>
-                        <p className="text-xs text-gray-400 leading-relaxed font-light text-justify">
-                          {globalState.proposal.sections["9_future_directions"]}
-                        </p>
-                      </div>
-
-                      {/* References */}
-                      <div className="flex flex-col gap-3 border-t border-zinc-900 pt-6 mt-4">
-                        <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                          10. References
-                        </h4>
-                        <ul className="text-[10px] text-zinc-500 font-mono flex flex-col gap-2 list-none pl-0">
-                          {globalState.proposal.sections["10_references"].map((ref, idx) => (
-                            <li key={idx} className="pl-6 -indent-6 leading-normal text-justify">
-                              {ref}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                    </div>
-                  </div>
-                )}
-
               </div>
-            </div>
+            </aside>
 
-          </main>
-          
-          {/* Dashboard Footer */}
-          <footer className="mt-auto border-t border-zinc-800 bg-black py-4 px-6 flex items-center justify-between text-xs text-zinc-500">
-            <span>Powered by Gemini generative models. Strictly sequential multi-agent execution pipeline.</span>
-            <span>&copy; {new Date().getFullYear()} Autonomous Research Lab.</span>
+          </div>
+
+          {/* Workbench Footer */}
+          <footer className="mt-auto border-t border-zinc-900 bg-black py-3 px-6 flex items-center justify-between text-[10px] text-zinc-600 font-mono">
+            <span>Workbench Status: Operational &bull; Sequentially Synchronized Agents</span>
+            <span>&copy; {new Date().getFullYear()} Autonomous Research Lab</span>
           </footer>
         </div>
       )}
