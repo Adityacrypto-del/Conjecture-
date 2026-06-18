@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { GooeyDemo } from "@/components/ui/demo";
 import { generateOfflineProposal } from "@/lib/simulator";
-import { runFullResearchPipeline } from "@/lib/gemini";
+import { runPipelineViaBackend } from "@/lib/api";
 import type { GlobalState, PipelineStep, LogEntry } from "@/lib/types";
 import Dock from "@/components/ui/Dock";
 import {
@@ -256,20 +256,18 @@ export default function App() {
         addLog("Orchestrator", `Critical error in simulated pipeline: ${err.message}`, "error");
       }
     } else {
-      // Real API Mode using Gemini or Groq
+      // Real API Mode — runs on the backend; the key stays server-side.
+      // A client key is sent only as an optional bring-your-own fallback.
       const activeApiKey = apiProvider === "groq" ? groqApiKey : geminiApiKey;
-      if (!activeApiKey) {
-        alert(`Please enter your ${apiProvider === "groq" ? "Groq" : "Gemini"} API key to run the live pipeline.`);
-        setStep("idle");
-        return;
-      }
-      
+
       try {
-        const state = await runFullResearchPipeline(
-          apiProvider,
-          question,
-          activeApiKey,
-          model,
+        const state = await runPipelineViaBackend(
+          {
+            provider: apiProvider,
+            question,
+            model,
+            apiKey: activeApiKey || undefined
+          },
           (currentStep, msg, partialState) => {
             setStep(currentStep as PipelineStep);
             setProgressPercent(getStepProgress(currentStep as PipelineStep));

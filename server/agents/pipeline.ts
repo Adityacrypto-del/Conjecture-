@@ -1,4 +1,4 @@
-import type { GlobalState } from "./types";
+import type { GlobalState } from "../../src/lib/types";
 import { v4 as uuidv4 } from "uuid";
 
 // Helper to query Semantic Scholar
@@ -7,10 +7,10 @@ async function searchSemanticScholar(query: string): Promise<any[]> {
     const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(
       query
     )}&fields=paperId,title,abstract,authors,year,citationCount,referenceCount,openAccessPdf,fieldsOfStudy,tldr&limit=12`;
-    
+
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Semantic Scholar API status: ${response.status}`);
-    const data = await response.json();
+    const data: any = await response.json();
     return data.data || [];
   } catch (error) {
     console.error("Semantic Scholar search failed, using fallback:", error);
@@ -41,15 +41,15 @@ async function queryLLM(
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
+      const err: any = await response.json().catch(() => ({}));
       throw new Error(
         err?.error?.message || `Groq API returned status ${response.status}`
       );
     }
-    const result = await response.json();
+    const result: any = await response.json();
     const text = result?.choices?.[0]?.message?.content;
     if (!text) throw new Error("Empty response from Groq API");
-    
+
     try {
       return JSON.parse(text);
     } catch (e) {
@@ -69,15 +69,15 @@ async function queryLLM(
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData: any = await response.json().catch(() => ({}));
       throw new Error(
         errorData?.error?.message || `Gemini API returned status ${response.status}`
       );
     }
-    const result = await response.json();
+    const result: any = await response.json();
     const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error("Empty response from Gemini API");
-    
+
     try {
       return JSON.parse(text);
     } catch (e) {
@@ -103,9 +103,9 @@ export async function runFullResearchPipeline(
   const parsePrompt = `
     You are the Master Orchestrator of a scientific research pipeline.
     Analyze the following research question and extract its domain, subdomain, key concepts, independent/dependent/confounding variables, research type, and construct 3 distinct search keywords for literature search.
-    
+
     Research Question: "${question}"
-    
+
     Return a JSON object conforming exactly to this structure:
     {
       "domain": "string",
@@ -122,7 +122,7 @@ export async function runFullResearchPipeline(
   `;
 
   const parsedQuery = await queryLLM(provider, apiKey, model, parsePrompt);
-  
+
   // Construct starting state
   let globalState: GlobalState = {
     session_id,
@@ -141,7 +141,7 @@ export async function runFullResearchPipeline(
   // STEP 2: Literature search
   const searchQuery = parsedQuery.keywords_for_search.join(" ");
   const rawPapers = await searchSemanticScholar(searchQuery);
-  
+
   onProgress("literature_agent", `Retrieved ${rawPapers.length} raw papers. Scoring, filtering, and synthesizing...`, globalState);
 
   // Prepare paper data for LLM processing
@@ -160,12 +160,12 @@ export async function runFullResearchPipeline(
   const litPrompt = `
     You are the Literature Agent, an expert in academic research synthesis.
     Analyze the following papers retrieved from Semantic Scholar for the research question: "${question}".
-    
+
     Parsed query context: ${JSON.stringify(parsedQuery)}
-    
+
     Retrieved papers:
     ${JSON.stringify(papersForLLM, null, 2)}
-    
+
     Instructions:
     1. Score each paper (0-10) based on:
        - Relevance (0-4): direct address of the question.
@@ -178,7 +178,7 @@ export async function runFullResearchPipeline(
     5. Identify 3-5 knowledge gaps.
     6. Identify 3-5 consensus findings.
     7. Identify contradictions where papers disagree.
-    
+
     Return a JSON object conforming exactly to this structure:
     {
       "papers": [
@@ -221,16 +221,16 @@ export async function runFullResearchPipeline(
   // STEP 3: Hypothesis Agent
   const hypPrompt = `
     You are the Hypothesis Agent. Generate exactly 3 distinct hypotheses based on the literature synthesis and gaps:
-    
+
     Research Question: "${question}"
     Literature Gaps: ${JSON.stringify(literatureResults.knowledge_gaps)}
     Literature Synthesis: "${literatureResults.synthesis}"
-    
+
     Strategy:
     - H1 (Gap-filling): Directly addresses a gap.
     - H2 (Mechanistic): Proposes a causal mechanism.
     - H3 (Contrarian/Novel): Challenges a consensus or proposes a new angle.
-    
+
     Requirements:
     - Must use If-Then-Because format.
     - Must state Null (H0) and Alternative (H1) hypotheses.
@@ -238,7 +238,7 @@ export async function runFullResearchPipeline(
     - Falsification criteria.
     - Novelty score (1-10) and Testability score (1-10) with justifications.
     - Map evidence to retrieved papers: ${JSON.stringify(literatureResults.papers.map((p: any) => ({id: p.paper_id, title: p.title})))}
-    
+
     Return a JSON array of exactly 3 HypothesisObjects, conforming to this schema for each object:
     {
       "hypothesis_id": "H1 | H2 | H3",
@@ -279,12 +279,12 @@ export async function runFullResearchPipeline(
   // STEP 4: Experiment Design Agent
   const expPrompt = `
     You are the Experiment Design Agent. For each of the 3 hypotheses generated, design a complete, rigorous experimental methodology:
-    
+
     Hypotheses: ${JSON.stringify(hypotheses, null, 2)}
     Parsed variables: ${JSON.stringify(parsedQuery.variables)}
-    
+
     For each hypothesis (H1, H2, H3), generate a corresponding experiment (E1, E2, E3). Use appropriate study designs (e.g. RCT, in-vitro/in-vivo, simulation, longitudinal).
-    
+
     Return a JSON array of exactly 3 ExperimentObjects, conforming to this schema for each object:
     {
       "experiment_id": "E1 | E2 | E3",
@@ -363,10 +363,10 @@ export async function runFullResearchPipeline(
   const critPrompt = `
     You are the Critique Agent, a senior peer reviewer.
     Evaluate the following hypotheses and experiment designs:
-    
+
     Hypotheses: ${JSON.stringify(hypotheses, null, 2)}
     Experiments: ${JSON.stringify(experiments, null, 2)}
-    
+
     Instructions:
     1. Evaluate each pair (H1+E1, H2+E2, H3+E3) on:
        - Novelty (0-10)
@@ -375,7 +375,7 @@ export async function runFullResearchPipeline(
        - Scientific rigor (0-10)
     2. Rank them and suggest optimal sequence.
     3. Outline synergies and fatal flaws.
-    
+
     Return a JSON object conforming exactly to this structure:
     {
       "overall_score": number,
@@ -452,16 +452,16 @@ export async function runFullResearchPipeline(
   const synthPrompt = `
     You are the Research Proposal Synthesizer.
     Using the accumulated research state, construct a cohesive and formal research proposal.
-    
+
     Research Question: "${question}"
     Parsed query: ${JSON.stringify(parsedQuery)}
     Literature Synthesis: "${literatureResults.synthesis}"
     Hypotheses: ${JSON.stringify(hypotheses)}
     Experiments: ${JSON.stringify(experiments)}
     Critique: ${JSON.stringify(critique)}
-    
+
     Assemble the proposal into 10 structured sections. Write rich, academic-style content. Include APA formatted citations and references.
-    
+
     Return a JSON object conforming exactly to this structure:
     {
       "title": "string",
