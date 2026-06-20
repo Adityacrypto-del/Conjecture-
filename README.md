@@ -40,8 +40,18 @@ A research question flows through six sequential agents, each building on the sh
 | 4 | **Experiment Agent** | Designs a full protocol per hypothesis (E1–E3): study design, sample size & power analysis, materials, procedure, statistics, timeline, and budget. |
 | 5 | **Critique Agent** | Acts as a senior peer reviewer — scoring novelty, feasibility, ethics, and scientific rigor, then ranking the proposals. |
 | 6 | **Synthesizer** | Assembles everything into a formal 10-section proposal with an abstract and APA references. |
+| 7 | **Verification Agent** *(optional)* | Fact-checks each generated claim against the real source abstracts and reports a trust score. Off by default; toggle it in the Config drawer. |
 
 The full schema for each stage lives in [`src/lib/types.ts`](src/lib/types.ts).
+
+### Grounding & trust
+
+To keep proposals honest, the backend:
+
+- **Builds references and DOIs in code** from the real Semantic Scholar metadata — the model never writes the reference list, so citations can't be fabricated.
+- **Validates every cited `paper_id`** against the papers actually retrieved, dropping any the model invented (surfaced as an "invented dropped" badge).
+- **Reports grounding** (how many retrieved papers had abstracts) and warns when a run is weakly grounded.
+- **Optionally verifies claims** against source abstracts when the Verification Agent is enabled, showing a colored trust-score badge on the proposal.
 
 ## Getting started
 

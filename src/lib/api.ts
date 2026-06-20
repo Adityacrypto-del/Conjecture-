@@ -12,6 +12,8 @@ interface RunPipelineOptions {
   model: string;
   /** Optional bring-your-own key. Normally the server uses its own env key. */
   apiKey?: string;
+  /** Enable the optional verification agent (extra LLM call). */
+  verify?: boolean;
   signal?: AbortSignal;
 }
 
@@ -21,13 +23,13 @@ interface RunPipelineOptions {
  * from the browser.
  */
 export async function runPipelineViaBackend(
-  { provider, question, model, apiKey, signal }: RunPipelineOptions,
+  { provider, question, model, apiKey, verify, signal }: RunPipelineOptions,
   onProgress: ProgressHandler
 ): Promise<GlobalState> {
   const response = await fetch("/api/pipeline", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, question, model, apiKey: apiKey || undefined }),
+    body: JSON.stringify({ provider, question, model, apiKey: apiKey || undefined, verify: Boolean(verify) }),
     signal
   });
 

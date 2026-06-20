@@ -1,97 +1,21 @@
 import type { GlobalState } from "../../src/lib/types";
 import { v4 as uuidv4 } from "uuid";
-
-// Helper to query Semantic Scholar
-async function searchSemanticScholar(query: string): Promise<any[]> {
-  try {
-    const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(
-      query
-    )}&fields=paperId,title,abstract,authors,year,citationCount,referenceCount,openAccessPdf,fieldsOfStudy,tldr&limit=12`;
-
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Semantic Scholar API status: ${response.status}`);
-    const data: any = await response.json();
-    return data.data || [];
-  } catch (error) {
-    console.error("Semantic Scholar search failed, using fallback:", error);
-    return [];
-  }
-}
-
-// Unified query helper for Gemini and Groq
-async function queryLLM(
-  provider: "gemini" | "groq",
-  apiKey: string,
-  model: string,
-  prompt: string
-): Promise<any> {
-  if (provider === "groq") {
-    const url = "https://api.groq.com/openai/v1/chat/completions";
-    const payload = {
-      model,
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" }
-    };
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) {
-      const err: any = await response.json().catch(() => ({}));
-      throw new Error(
-        err?.error?.message || `Groq API returned status ${response.status}`
-      );
-    }
-    const result: any = await response.json();
-    const text = result?.choices?.[0]?.message?.content;
-    if (!text) throw new Error("Empty response from Groq API");
-
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      console.error("Failed to parse Groq response as JSON. Output was:", text);
-      throw new Error("Groq response was not valid JSON");
-    }
-  } else {
-    // Gemini
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const payload: any = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    };
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) {
-      const errorData: any = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData?.error?.message || `Gemini API returned status ${response.status}`
-      );
-    }
-    const result: any = await response.json();
-    const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Empty response from Gemini API");
-
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      console.error("Failed to parse Gemini response as JSON. Output was:", text);
-      throw new Error("Gemini response was not valid JSON");
-    }
-  }
-}
+import { queryLLM, type Provider } from "../lib/llm";
+import { searchPapers, type RawPaper } from "../lib/semanticScholar";
+import {
+  reconcilePapers,
+  buildReferences,
+  buildInTextCitations,
+  validateCitations
+} from "../lib/citations";
+import { verifyProposal } from "./verify";
 
 export async function runFullResearchPipeline(
-  provider: "gemini" | "groq",
+  provider: Provider,
   question: string,
   apiKey: string,
   model: string = "gemini-2.5-flash",
+  verify: boolean,
   onProgress: (step: string, message: string, state?: Partial<GlobalState>) => void
 ): Promise<GlobalState> {
   onProgress("orchestrator_parse", "Parsing research question and extracting variables...");
@@ -138,18 +62,25 @@ export async function runFullResearchPipeline(
 
   onProgress("literature_agent", "Searching Semantic Scholar API and analyzing literature...", globalState);
 
-  // STEP 2: Literature search
-  const searchQuery = parsedQuery.keywords_for_search.join(" ");
-  const rawPapers = await searchSemanticScholar(searchQuery);
+  // STEP 2: Literature search (robust, multi-query, deduped)
+  const retrieval = await searchPapers(parsedQuery.keywords_for_search || [], question);
+  const rawById = new Map<string, RawPaper>(retrieval.papers.map((p) => [p.paperId, p]));
 
-  onProgress("literature_agent", `Retrieved ${rawPapers.length} raw papers. Scoring, filtering, and synthesizing...`, globalState);
+  if (retrieval.note) {
+    onProgress("literature_agent", `⚠️ ${retrieval.note}`, globalState);
+  }
+  onProgress(
+    "literature_agent",
+    `Retrieved ${retrieval.retrieved} papers (${retrieval.withAbstracts} with abstracts). Scoring, filtering, and synthesizing...`,
+    globalState
+  );
 
-  // Prepare paper data for LLM processing
-  const papersForLLM = rawPapers.map((p, idx) => ({
-    paperId: p.paperId || `paper_${idx}`,
+  // Prepare paper data for the LLM (real metadata only).
+  const papersForLLM = retrieval.papers.map((p) => ({
+    paperId: p.paperId,
     title: p.title || "Untitled Paper",
     abstract: p.abstract || "No abstract available",
-    authors: p.authors ? p.authors.map((a: any) => a.name) : ["Unknown"],
+    authors: p.authors ? p.authors.map((a) => a.name) : ["Unknown"],
     year: p.year || 2020,
     citationCount: p.citationCount || 0,
     referenceCount: p.referenceCount || 0,
@@ -166,6 +97,12 @@ export async function runFullResearchPipeline(
     Retrieved papers:
     ${JSON.stringify(papersForLLM, null, 2)}
 
+    GROUNDING RULES (critical):
+    - Use ONLY the exact "paperId" values provided above as paper_id. Never invent a paper_id.
+    - Do NOT fabricate papers, findings, DOIs, or citations. If the retrieved papers are
+      insufficient, retain fewer papers rather than inventing any.
+    - Base every claim on the provided abstracts. Cite papers as (LastName, Year).
+
     Instructions:
     1. Score each paper (0-10) based on:
        - Relevance (0-4): direct address of the question.
@@ -174,7 +111,7 @@ export async function runFullResearchPipeline(
        - Methodological richness (0-2): does it detail methods?
     2. Retain up to 8 top papers with score >= 5. If none, retain the best available.
     3. For each retained paper, extract detailed knowledge matching the PaperObject schema.
-    4. Generate a narrative synthesis of 3-4 paragraphs using academic tone. Cite the papers as (LastName, Year).
+    4. Generate a narrative synthesis of 3-4 paragraphs using academic tone.
     5. Identify 3-5 knowledge gaps.
     6. Identify 3-5 consensus findings.
     7. Identify contradictions where papers disagree.
@@ -183,7 +120,7 @@ export async function runFullResearchPipeline(
     {
       "papers": [
         {
-          "paper_id": "string (use semantic scholar ID or paper_XX)",
+          "paper_id": "string (MUST be one of the provided paperId values)",
           "title": "string",
           "authors": ["LastName, FirstInitial"],
           "year": number,
@@ -214,7 +151,17 @@ export async function runFullResearchPipeline(
   `;
 
   const literatureResults = await queryLLM(provider, apiKey, model, litPrompt);
+  // Workstream 1: overwrite factual fields with real metadata; drop invented papers.
+  literatureResults.papers = reconcilePapers(literatureResults.papers, rawById);
   globalState.literature = literatureResults;
+  globalState.grounding = {
+    papers_retrieved: retrieval.retrieved,
+    papers_with_abstracts: retrieval.withAbstracts,
+    dropped_citations: [],
+    note: retrieval.note
+  };
+
+  const validIds = new Set<string>(globalState.literature.papers.map((p) => p.paper_id));
 
   onProgress("hypothesis_agent", "Generating testable and falsifiable hypotheses...", globalState);
 
@@ -237,7 +184,9 @@ export async function runFullResearchPipeline(
     - Specify independent, dependent, and controls.
     - Falsification criteria.
     - Novelty score (1-10) and Testability score (1-10) with justifications.
-    - Map evidence to retrieved papers: ${JSON.stringify(literatureResults.papers.map((p: any) => ({id: p.paper_id, title: p.title})))}
+    - In evidence_map, cite ONLY these real paper_ids (never invent one): ${JSON.stringify(
+      literatureResults.papers.map((p: any) => ({ id: p.paper_id, title: p.title }))
+    )}
 
     Return a JSON array of exactly 3 HypothesisObjects, conforming to this schema for each object:
     {
@@ -460,7 +409,9 @@ export async function runFullResearchPipeline(
     Experiments: ${JSON.stringify(experiments)}
     Critique: ${JSON.stringify(critique)}
 
-    Assemble the proposal into 10 structured sections. Write rich, academic-style content. Include APA formatted citations and references.
+    Assemble the proposal into 10 structured sections. Write rich, academic-style content.
+    Do NOT invent references — the reference list and in-text citation tokens are generated
+    separately from verified metadata, so leave "citations" and "10_references" as empty arrays.
 
     Return a JSON object conforming exactly to this structure:
     {
@@ -475,7 +426,7 @@ export async function runFullResearchPipeline(
         },
         "2_literature_review": {
           "content": "string (narrative synthesis)",
-          "citations": ["string"]
+          "citations": []
         },
         "3_hypotheses": {
           "hypothesis_1": { "title": "string", "statement": "string", "null_hyp": "string", "alt_hyp": "string" },
@@ -484,22 +435,67 @@ export async function runFullResearchPipeline(
         },
         "4_methodology": {
           "overview": "string",
-          "primary_experiment": {}, // Insert E1 or chosen best experiment
-          "alternative_experiments": [] // Insert other two experiments
+          "primary_experiment": {},
+          "alternative_experiments": []
         },
         "5_ethical_considerations": "string (consolidated ethical analysis)",
         "6_timeline_and_budget": "string (consolidated budget and timeline)",
         "7_expected_outcomes": "string",
         "8_limitations": "string",
         "9_future_directions": "string",
-        "10_references": ["string (APA references)"]
+        "10_references": []
       }
     }
   `;
 
-  // Make sure to pass correct references and align experiments
   const proposalResults = await queryLLM(provider, apiKey, model, synthPrompt);
   globalState.proposal = proposalResults;
+
+  // Workstream 1: replace references/citations with deterministic ones from real metadata.
+  if (globalState.proposal?.sections) {
+    const refs = buildReferences(globalState.literature.papers);
+    const inText = buildInTextCitations(globalState.literature.papers);
+    globalState.proposal.sections["10_references"] = refs;
+    if (globalState.proposal.sections["2_literature_review"]) {
+      globalState.proposal.sections["2_literature_review"].citations = inText;
+    }
+  }
+
+  // Workstream 2: drop any citations that don't map to a real retrieved paper.
+  const dropped = validateCitations(globalState, validIds);
+  if (globalState.grounding) globalState.grounding.dropped_citations = dropped;
+  if (dropped.length > 0) {
+    onProgress(
+      "proposal_synthesizer",
+      `⚠️ Removed ${dropped.length} invented citation(s) that did not match any retrieved paper.`,
+      globalState
+    );
+  }
+
+  // OPTIONAL: Verification agent (extra LLM call; only when enabled).
+  if (verify) {
+    onProgress("verification_agent", "Cross-checking claims against real source abstracts...", globalState);
+    try {
+      globalState.verification = await verifyProposal(provider, apiKey, model, globalState, rawById);
+      onProgress(
+        "verification_agent",
+        `Verification complete — trust score ${globalState.verification.score}% (${globalState.verification.verified}/${globalState.verification.total_claims} claims supported).`,
+        globalState
+      );
+    } catch (err: any) {
+      globalState.verification = {
+        enabled: true,
+        score: 0,
+        total_claims: 0,
+        verified: 0,
+        partially_supported: 0,
+        unsupported: 0,
+        claims: [],
+        error: err?.message || "Verification failed."
+      };
+      onProgress("verification_agent", `⚠️ Verification could not complete: ${err?.message || "error"}`, globalState);
+    }
+  }
 
   onProgress("completed", "Pipeline completed successfully!", globalState);
   return globalState;

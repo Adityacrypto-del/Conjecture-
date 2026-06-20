@@ -18,10 +18,42 @@ export interface PaperObject {
   doi_or_url: string;
 }
 
+export interface GroundingInfo {
+  papers_retrieved: number;
+  papers_with_abstracts: number;
+  /** IDs cited by agents that did not match any retrieved paper and were dropped. */
+  dropped_citations: string[];
+  note?: string;
+}
+
+export interface VerificationClaim {
+  claim: string;
+  cited_papers: string[];
+  verdict: "supported" | "partially_supported" | "unsupported";
+  reason: string;
+}
+
+export interface VerificationReport {
+  enabled: boolean;
+  /** 0-100, share of claims supported by the cited abstracts (partial = half). */
+  score: number;
+  total_claims: number;
+  verified: number;
+  partially_supported: number;
+  unsupported: number;
+  claims: VerificationClaim[];
+  /** Set when the verification pass could not run. */
+  error?: string;
+}
+
 export interface GlobalState {
   session_id: string;
   timestamp: string;
   research_question: string;
+  /** Set after the literature stage; summarizes how well-grounded the run is. */
+  grounding?: GroundingInfo;
+  /** Set only when the optional verification agent is enabled. */
+  verification?: VerificationReport;
   parsed_query: {
     domain: string;
     subdomain: string;
@@ -269,12 +301,13 @@ export type PipelineStep =
   | "experiment_agent"
   | "critique_agent"
   | "proposal_synthesizer"
+  | "verification_agent"
   | "completed"
   | "error";
 
 export interface LogEntry {
   timestamp: string;
-  agent: "Orchestrator" | "Literature Agent" | "Hypothesis Agent" | "Experiment Agent" | "Critique Agent" | "Synthesizer";
+  agent: "Orchestrator" | "Literature Agent" | "Hypothesis Agent" | "Experiment Agent" | "Critique Agent" | "Synthesizer" | "Verification Agent";
   message: string;
   type: "info" | "success" | "warning" | "error";
 }

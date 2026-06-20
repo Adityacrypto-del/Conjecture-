@@ -26,7 +26,7 @@ app.get("/api/health", (_req, res) => {
  * the client may optionally pass its own key (BYOK) but never has to.
  */
 app.post("/api/pipeline", async (req, res) => {
-  const { provider = "gemini", question, model, apiKey: clientKey } = req.body ?? {};
+  const { provider = "gemini", question, model, apiKey: clientKey, verify = false } = req.body ?? {};
 
   if (!question || typeof question !== "string" || !question.trim()) {
     res.status(400).json({ error: "A non-empty 'question' is required." });
@@ -72,6 +72,7 @@ app.post("/api/pipeline", async (req, res) => {
       question,
       apiKey,
       resolvedModel,
+      Boolean(verify),
       (step, message, state) => {
         if (aborted) return;
         send({ type: "progress", step, message, state });

@@ -35,6 +35,7 @@ export default function App() {
   const [groqApiKey, setGroqApiKey] = useState(import.meta.env.VITE_GROQ_API_KEY || "");
   const [useRealApi, setUseRealApi] = useState(true);
   const [model, setModel] = useState("gemini-2.5-flash");
+  const [verifyEnabled, setVerifyEnabled] = useState(false);
   
   // Running State
   const [step, setStep] = useState<PipelineStep>("idle");
@@ -97,8 +98,9 @@ export default function App() {
       case "literature_agent": return 35;
       case "hypothesis_agent": return 55;
       case "experiment_agent": return 75;
-      case "critique_agent": return 90;
-      case "proposal_synthesizer": return 97;
+      case "critique_agent": return 88;
+      case "proposal_synthesizer": return 94;
+      case "verification_agent": return 98;
       case "completed": return 100;
       case "error": return 100;
       default: return 0;
@@ -266,7 +268,8 @@ export default function App() {
             provider: apiProvider,
             question,
             model,
-            apiKey: activeApiKey || undefined
+            apiKey: activeApiKey || undefined,
+            verify: verifyEnabled
           },
           (currentStep, msg, partialState) => {
             setStep(currentStep as PipelineStep);
@@ -278,6 +281,7 @@ export default function App() {
             else if (currentStep === "experiment_agent") agentName = "Experiment Agent";
             else if (currentStep === "critique_agent") agentName = "Critique Agent";
             else if (currentStep === "proposal_synthesizer") agentName = "Synthesizer";
+            else if (currentStep === "verification_agent") agentName = "Verification Agent";
             
             const isErr = currentStep === "error";
             addLog(agentName, msg, isErr ? "error" : "info");
@@ -620,6 +624,37 @@ export default function App() {
                   </select>
                 </div>
               </div>
+
+              {/* Verification agent toggle */}
+              <div className="max-w-7xl mx-auto mt-4 flex items-center justify-between gap-4 border-t border-zinc-900 pt-4">
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-purple-400" />
+                    Verification Agent
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-light mt-0.5">
+                    Fact-checks every claim against the real source abstracts. Adds an extra LLM call &amp; ~5–15s. Live mode only.
+                  </span>
+                </div>
+                <button
+                  onClick={() => setVerifyEnabled((v) => !v)}
+                  disabled={!useRealApi}
+                  role="switch"
+                  aria-checked={verifyEnabled}
+                  className={`relative w-11 h-6 rounded-full border transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
+                    verifyEnabled && useRealApi
+                      ? "bg-purple-500/30 border-purple-500"
+                      : "bg-zinc-900 border-zinc-800"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-4.5 h-4.5 rounded-full transition-all ${
+                      verifyEnabled && useRealApi ? "left-5 bg-purple-400" : "left-0.5 bg-zinc-600"
+                    }`}
+                    style={{ width: "1.125rem", height: "1.125rem" }}
+                  />
+                </button>
+              </div>
             </div>
           )}
 
@@ -792,6 +827,34 @@ export default function App() {
                         <span>&bull;</span>
                         <span>DATE: {globalState ? new Date(globalState.timestamp).toLocaleDateString() : "..."}</span>
                       </div>
+
+                      {/* Grounding + verification badges */}
+                      {globalState && (globalState.grounding || globalState.verification) && (
+                        <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+                          {globalState.grounding && (
+                            <span className="px-2.5 py-1 rounded-full border border-zinc-800 bg-zinc-900/50 text-[9px] font-mono text-zinc-400 flex items-center gap-1.5">
+                              <Database className="w-3 h-3 text-zinc-500" />
+                              {globalState.grounding.papers_with_abstracts}/{globalState.grounding.papers_retrieved} sourced
+                              {globalState.grounding.dropped_citations.length > 0 &&
+                                ` · ${globalState.grounding.dropped_citations.length} invented dropped`}
+                            </span>
+                          )}
+                          {globalState.verification && !globalState.verification.error && (
+                            <span
+                              className={`px-2.5 py-1 rounded-full border text-[9px] font-mono flex items-center gap-1.5 ${
+                                globalState.verification.score >= 75
+                                  ? "border-green-500/40 bg-green-500/10 text-green-400"
+                                  : globalState.verification.score >= 50
+                                  ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-400"
+                                  : "border-red-500/40 bg-red-500/10 text-red-400"
+                              }`}
+                            >
+                              <Check className="w-3 h-3" />
+                              {globalState.verification.score}% verified · {globalState.verification.verified}/{globalState.verification.total_claims} claims
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Abstract Section */}
