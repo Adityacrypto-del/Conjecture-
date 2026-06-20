@@ -17,6 +17,9 @@ function GooeyDemo({ onStart }: GooeyDemoProps) {
       <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center z-10 relative">
         {/* Left column: Text */}
         <div className="flex flex-col items-center lg:items-start text-center lg:text-left gap-6 max-w-2xl mx-auto lg:mx-0">
+          <span className="text-xs font-mono uppercase tracking-[0.35em] text-purple-400/80">
+            Conjecture
+          </span>
           <h1 className="text-white text-5xl md:text-7xl font-calendas font-bold tracking-tight leading-tight">
             Speaking science <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-indigo-500">

@@ -1,4 +1,6 @@
-# Manuscript Workbench
+# Conjecture
+
+> From question to grounded research proposal.
 
 An AI research-proposal generator. Give it a research question and a pipeline of six
 specialized agents searches the literature, generates hypotheses, designs experiments,

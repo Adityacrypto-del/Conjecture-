@@ -486,10 +486,10 @@ export default function App() {
           <header className="sticky top-0 z-40 w-full border-b border-zinc-900 bg-black/90 backdrop-blur-md px-6 py-4 flex items-center justify-between">
             <div className="flex flex-col">
               <span className="text-sm font-bold font-overusedGrotesk tracking-wide text-white uppercase">
-                MANUSCRIPT WORKBENCH
+                CONJECTURE
               </span>
               <span className="text-[10px] text-zinc-500 uppercase font-mono tracking-wider">
-                PS-AG8 Research Engine
+                Grounded Research Engine
               </span>
             </div>
 
