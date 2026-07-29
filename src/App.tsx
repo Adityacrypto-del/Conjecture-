@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { GooeyDemo } from "@/components/ui/demo";
 import { generateOfflineProposal } from "@/lib/simulator";
 import { runPipelineViaBackend } from "@/lib/api";
+import { exportProposalPdf, exportProposalDocx } from "@/lib/proposalExport";
+import CitationGraph from "@/components/CitationGraph";
 import type { GlobalState, PipelineStep, LogEntry } from "@/lib/types";
 import Dock from "@/components/ui/Dock";
 import {
@@ -15,6 +17,8 @@ import {
   Cpu,
   Play,
   Download,
+  FileDown,
+  FileType,
   RefreshCw,
   Search,
   Database,
@@ -22,7 +26,8 @@ import {
   Check,
   Layers,
   ArrowLeft,
-  HelpCircle
+  HelpCircle,
+  Network
 } from "lucide-react";
 
 export default function App() {
@@ -44,7 +49,7 @@ export default function App() {
   const [progressPercent, setProgressPercent] = useState(0);
 
   // Inspector States
-  const [activeInspectorTab, setActiveInspectorTab] = useState<"papers" | "protocols" | "critiques">("papers");
+  const [activeInspectorTab, setActiveInspectorTab] = useState<"papers" | "protocols" | "critiques" | "network">("papers");
   const [selectedHypIndex, setSelectedHypIndex] = useState(0);
   const [selectedExpIndex, setSelectedExpIndex] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -357,6 +362,20 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadPdf = () => {
+    if (!globalState) return;
+    exportProposalPdf(globalState);
+  };
+
+  const downloadDocx = async () => {
+    if (!globalState) return;
+    try {
+      await exportProposalDocx(globalState);
+    } catch (err) {
+      console.error("DOCX export failed:", err);
+    }
+  };
+
   const getStepColor = (nodeStep: PipelineStep) => {
     if (step === nodeStep) return "text-purple-400 border-purple-500 bg-purple-950/30 shadow-[0_0_15px_rgba(168,85,247,0.2)]";
     if (step === "completed" || getStepProgress(step) > getStepProgress(nodeStep)) {
@@ -470,6 +489,26 @@ export default function App() {
       onClick: () => {
         if (globalState) {
           downloadMarkdown();
+        }
+      },
+      className: !globalState ? "opacity-30 cursor-not-allowed" : ""
+    },
+    {
+      icon: <FileType className="w-4 h-4 text-white" />,
+      label: "Export DOCX",
+      onClick: () => {
+        if (globalState) {
+          downloadDocx();
+        }
+      },
+      className: !globalState ? "opacity-30 cursor-not-allowed" : ""
+    },
+    {
+      icon: <FileDown className="w-4 h-4 text-white" />,
+      label: "Export PDF",
+      onClick: () => {
+        if (globalState) {
+          downloadPdf();
         }
       },
       className: !globalState ? "opacity-30 cursor-not-allowed" : ""
@@ -794,10 +833,24 @@ export default function App() {
                     </button>
                     <button
                       onClick={downloadMarkdown}
-                      className="px-2.5 py-1 bg-white hover:bg-zinc-200 text-black rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                      className="px-2.5 py-1 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded text-[10px] font-mono hover:text-white transition-all cursor-pointer flex items-center gap-1"
                     >
                       <Download className="w-3 h-3" />
-                      <span>MARKDOWN</span>
+                      <span>MD</span>
+                    </button>
+                    <button
+                      onClick={downloadDocx}
+                      className="px-2.5 py-1 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded text-[10px] font-mono hover:text-white transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <FileType className="w-3 h-3" />
+                      <span>DOCX</span>
+                    </button>
+                    <button
+                      onClick={downloadPdf}
+                      className="px-2.5 py-1 bg-white hover:bg-zinc-200 text-black rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <FileDown className="w-3 h-3" />
+                      <span>PDF</span>
                     </button>
                   </div>
                 )}
@@ -1146,11 +1199,17 @@ export default function App() {
                     icon: FlaskConical, 
                     available: !!(globalState?.experiments && globalState.experiments.length > 0) 
                   },
-                  { 
-                    id: "critiques", 
-                    label: "Critique", 
-                    icon: ShieldAlert, 
-                    available: !!(globalState?.critique?.per_hypothesis && globalState.critique.per_hypothesis.length > 0) 
+                  {
+                    id: "critiques",
+                    label: "Critique",
+                    icon: ShieldAlert,
+                    available: !!(globalState?.critique?.per_hypothesis && globalState.critique.per_hypothesis.length > 0)
+                  },
+                  {
+                    id: "network",
+                    label: "Network",
+                    icon: Network,
+                    available: !!(globalState?.literature?.papers && globalState.literature.papers.length > 0)
                   }
                 ].map((t) => {
                   const Icon = t.icon;
@@ -1339,6 +1398,21 @@ export default function App() {
                             </div>
                           );
                         })()}
+                      </div>
+                    )}
+
+                    {/* NETWORK INSPECTOR */}
+                    {activeInspectorTab === "network" && (
+                      <div className="flex flex-col gap-3 -m-1">
+                        <span className="text-[9px] text-zinc-500 font-mono uppercase tracking-wider block border-b border-zinc-900 pb-1.5">
+                          Evidence Network · papers × hypotheses
+                        </span>
+                        <div className="border border-zinc-900 rounded-lg overflow-hidden">
+                          <CitationGraph state={globalState} />
+                        </div>
+                        <p className="text-[9px] text-zinc-600 font-light leading-normal">
+                          Node size = citations · color = stance toward thesis. Drag nodes to explore; expand for the full view.
+                        </p>
                       </div>
                     )}
                   </div>
