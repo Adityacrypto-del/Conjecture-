@@ -31,7 +31,9 @@ import {
   Network,
   History,
   Trash2,
-  Clock
+  Clock,
+  AlertTriangle,
+  X
 } from "lucide-react";
 
 function timeAgo(ms: number): string {
@@ -71,6 +73,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
   const manuscriptRef = useRef<HTMLDivElement>(null);
@@ -169,10 +172,11 @@ export default function App() {
 
   const triggerPipeline = async () => {
     if (!question.trim()) {
-      alert("Please enter a valid research question.");
+      setErrorMessage("Please enter a research question before running the pipeline.");
       return;
     }
 
+    setErrorMessage(null);
     setStep("orchestrator_parse");
     setLogs([]);
     setGlobalState(null);
@@ -355,9 +359,17 @@ export default function App() {
         setGlobalState(state);
         persistRun(state);
       } catch (err: any) {
+        const raw = err?.message || "Unknown error";
         setStep("error");
-        addLog("Orchestrator", `Pipeline failed: ${err.message}`, "error");
-        alert(`API Error: ${err.message}`);
+        setProgressPercent(0);
+        addLog("Orchestrator", `Pipeline failed: ${raw}`, "error");
+        // Friendlier guidance for the most common failure: no API key configured.
+        const missingKey = /api key/i.test(raw);
+        setErrorMessage(
+          missingKey
+            ? `No ${apiProvider === "groq" ? "Groq" : "Gemini"} API key configured. Add one in the Config drawer, set it in the server .env, or switch to Offline Sim mode to run without a key.`
+            : `Pipeline failed: ${raw}`
+        );
       }
     }
   };
@@ -622,6 +634,33 @@ export default function App() {
                 className="bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 h-full transition-all duration-500"
                 style={{ width: `${progressPercent}%` }}
               />
+            </div>
+          )}
+
+          {/* Error banner (non-blocking) */}
+          {errorMessage && (
+            <div className="w-full bg-red-950/40 border-b border-red-900/60 px-8 py-3 flex items-start gap-3 animate-in slide-in-from-top">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <p className="flex-1 text-[11px] text-red-200 leading-relaxed font-light">{errorMessage}</p>
+              {/api key/i.test(errorMessage) && (
+                <button
+                  onClick={() => {
+                    setUseRealApi(false);
+                    setErrorMessage(null);
+                    setStep("idle");
+                  }}
+                  className="shrink-0 px-2.5 py-1 bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 rounded text-[10px] font-bold uppercase tracking-wider text-red-200 transition-all cursor-pointer"
+                >
+                  Use Offline Sim
+                </button>
+              )}
+              <button
+                onClick={() => setErrorMessage(null)}
+                className="shrink-0 p-0.5 text-red-400/70 hover:text-red-200 transition-all cursor-pointer"
+                aria-label="Dismiss error"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 
