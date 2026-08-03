@@ -1,5 +1,7 @@
 # Conjecture
 
+[![CI](https://github.com/Adityacrypto-del/Conjecture-/actions/workflows/ci.yml/badge.svg)](https://github.com/Adityacrypto-del/Conjecture-/actions/workflows/ci.yml)
+
 > From question to grounded research proposal.
 
 An AI research-proposal generator. Give it a research question and a pipeline of six

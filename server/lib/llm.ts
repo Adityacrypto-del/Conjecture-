@@ -25,7 +25,7 @@ class LLMError extends Error {
 
 // Providers often tell us exactly how long to wait on a 429. Honor that (the
 // message carries "retry in 32.5s"; structured details carry "retryDelay": "32s").
-function parseRetryAfterMs(message: string, details: any): number | undefined {
+export function parseRetryAfterMs(message: string, details: any): number | undefined {
   const fromMsg = message.match(/retry in ([\d.]+)s/i);
   if (fromMsg) return Math.ceil(parseFloat(fromMsg[1]) * 1000);
   if (Array.isArray(details)) {
@@ -64,7 +64,7 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
  * ```json fences, leading/trailing prose, or a stray token before the object.
  * Falls back to extracting the outermost {...} / [...] span.
  */
-function looseJsonParse(raw: string): any {
+export function looseJsonParse(raw: string): any {
   let t = raw.trim();
   const fence = t.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   if (fence) t = fence[1].trim();
