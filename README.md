@@ -14,6 +14,17 @@ backend. The pipeline and your API keys run **server-side** — keys are never e
 the browser. Supports **Google Gemini** and **Groq** as LLM providers, with an
 **offline simulation mode** that needs no API key.
 
+## Screenshots
+
+|  |  |
+| --- | --- |
+| ![Landing](docs/screenshots/landing.jpg) | ![Manuscript workbench](docs/screenshots/workbench.jpg) |
+| The landing page. | The workbench: a compiled proposal with live critique dials, run history, and Markdown/DOCX/PDF export. |
+
+![Evidence network](docs/screenshots/evidence-network.jpg)
+
+*The Evidence Network — a D3 force graph of retrieved papers (sized by citations, colored by stance toward the thesis) and the hypotheses they support or contradict.*
+
 ## Architecture
 
 ```
