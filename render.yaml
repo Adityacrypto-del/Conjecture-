@@ -1,0 +1,26 @@
+# Render blueprint — deploys Conjecture as a single web service:
+# the Express backend serves the API *and* the built frontend from /dist.
+#
+# Deploy: push to GitHub, then in Render → New → Blueprint, pick this repo.
+# The app runs in Offline Sim mode with no config. To enable the live pipeline
+# for all visitors, add GEMINI_API_KEY (or GROQ_API_KEY) in the service's
+# Environment settings — otherwise visitors can bring their own key in the UI.
+services:
+  - type: web
+    name: conjecture
+    runtime: node
+    plan: free
+    # --include=dev so build tools (vite, tsc, vitest) are available at build time.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Uncomment and set in the Render dashboard (do NOT commit real keys):
+      # - key: GEMINI_API_KEY
+      #   sync: false
+      # - key: GROQ_API_KEY
+      #   sync: false
+      # - key: SEMANTIC_SCHOLAR_API_KEY
+      #   sync: false

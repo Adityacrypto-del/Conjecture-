@@ -93,10 +93,35 @@ client at <http://localhost:5173>.
 | `npm run dev:client` | Start only the Vite frontend |
 | `npm run dev:server` | Start only the Express API (watch mode) |
 | `npm run build` | Type-check and build the frontend for production |
-| `npm run start:server` | Run the backend API (production) |
+| `npm run start` | Run the production server (serves API **and** built frontend) |
+| `npm run start:server` | Run the backend API only |
+| `npm run test` | Run the Vitest suite |
 | `npm run typecheck:server` | Type-check the `server/` code |
 | `npm run preview` | Preview the production build locally |
 | `npm run lint` | Run ESLint |
+
+## Deploy
+
+Conjecture ships as a **single web service**: in production the Express server
+serves the built frontend from `/dist` alongside the API, so there's one URL,
+no CORS, and no second host to manage.
+
+The repo includes a [`render.yaml`](render.yaml) blueprint:
+
+1. Push to GitHub.
+2. On [Render](https://render.com): **New → Blueprint**, select this repo. It
+   builds with `npm ci --include=dev && npm run build` and starts with `npm start`.
+3. Done — the deployed app runs in **Offline Sim** mode with no configuration.
+
+To enable the **live pipeline for all visitors**, add `GEMINI_API_KEY` (or
+`GROQ_API_KEY`) in the service's **Environment** settings. Otherwise visitors can
+still run live mode by pasting their own key in the Config drawer (bring-your-own-key).
+
+Locally you can preview the production build the same way:
+
+```bash
+npm run build && npm start   # serves everything on http://localhost:8787
+```
 
 ## Execution modes
 

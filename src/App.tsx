@@ -56,7 +56,10 @@ export default function App() {
   const [apiProvider, setApiProvider] = useState<"gemini" | "groq">("gemini");
   const [geminiApiKey, setGeminiApiKey] = useState(import.meta.env.VITE_GEMINI_API_KEY || "");
   const [groqApiKey, setGroqApiKey] = useState(import.meta.env.VITE_GROQ_API_KEY || "");
-  const [useRealApi, setUseRealApi] = useState(true);
+  // Default to offline simulation so the app works instantly with no API key
+  // (the deployed demo, and first-run locally). Switch to a live provider in
+  // the Config drawer once a key is set.
+  const [useRealApi, setUseRealApi] = useState(false);
   const [model, setModel] = useState("gemini-flash-latest");
   const [verifyEnabled, setVerifyEnabled] = useState(false);
   

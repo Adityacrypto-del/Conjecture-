@@ -1,10 +1,13 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { runFullResearchPipeline } from "./agents/pipeline";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 8787;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
@@ -89,6 +92,17 @@ app.post("/api/pipeline", async (req, res) => {
     res.end();
   }
 });
+
+// In production, serve the built frontend from the same service so the whole
+// app is a single deploy (no CORS, no second host). The SPA fallback returns
+// index.html for any non-/api route so client-side routing works.
+if (process.env.NODE_ENV === "production") {
+  const dist = path.resolve(__dirname, "../dist");
+  app.use(express.static(dist));
+  app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.sendFile(path.join(dist, "index.html"));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`[server] Research API listening on http://localhost:${PORT}`);
