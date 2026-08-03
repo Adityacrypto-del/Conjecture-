@@ -115,7 +115,7 @@ drawer (bring-your-own-key) when the server has none configured.
 
 | Provider | Models |
 | -------- | ------ |
-| Gemini | `gemini-2.5-flash` (default), `gemini-2.5-pro` |
+| Gemini | `gemini-flash-latest` (default), `gemini-flash-lite-latest`, `gemini-pro-latest` |
 | Groq | `llama-3.3-70b-versatile` (default), `deepseek-r1-distill-llama-70b` |
 
 ## Using the app

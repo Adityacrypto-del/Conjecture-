@@ -57,7 +57,7 @@ export default function App() {
   const [geminiApiKey, setGeminiApiKey] = useState(import.meta.env.VITE_GEMINI_API_KEY || "");
   const [groqApiKey, setGroqApiKey] = useState(import.meta.env.VITE_GROQ_API_KEY || "");
   const [useRealApi, setUseRealApi] = useState(true);
-  const [model, setModel] = useState("gemini-2.5-flash");
+  const [model, setModel] = useState("gemini-flash-latest");
   const [verifyEnabled, setVerifyEnabled] = useState(false);
   
   // Running State
@@ -102,7 +102,7 @@ export default function App() {
     if (apiProvider === "groq") {
       setModel("llama-3.3-70b-versatile");
     } else {
-      setModel("gemini-2.5-flash");
+      setModel("gemini-flash-latest");
     }
   }, [apiProvider]);
 
@@ -752,8 +752,9 @@ export default function App() {
                       </>
                     ) : (
                       <>
-                        <option value="gemini-2.5-flash">gemini-2.5-flash (recommended)</option>
-                        <option value="gemini-2.5-pro">gemini-2.5-pro (deep research)</option>
+                        <option value="gemini-flash-latest">gemini-flash-latest (recommended)</option>
+                        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (fastest)</option>
+                        <option value="gemini-pro-latest">gemini-pro-latest (deep research)</option>
                       </>
                     )}
                   </select>

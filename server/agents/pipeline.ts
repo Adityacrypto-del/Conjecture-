@@ -14,7 +14,7 @@ export async function runFullResearchPipeline(
   provider: Provider,
   question: string,
   apiKey: string,
-  model: string = "gemini-2.5-flash",
+  model: string = "gemini-flash-latest",
   verify: boolean,
   onProgress: (step: string, message: string, state?: Partial<GlobalState>) => void
 ): Promise<GlobalState> {

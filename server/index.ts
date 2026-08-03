@@ -49,7 +49,7 @@ app.post("/api/pipeline", async (req, res) => {
     return;
   }
 
-  const resolvedModel = model || (provider === "groq" ? "llama-3.3-70b-versatile" : "gemini-2.5-flash");
+  const resolvedModel = model || (provider === "groq" ? "llama-3.3-70b-versatile" : "gemini-flash-latest");
 
   // Open the SSE stream.
   res.writeHead(200, {
